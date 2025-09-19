@@ -1,0 +1,20 @@
+# React build output
+build/
+
+# Production bundle analysis
+bundle-analyzer-report.html
+
+# ESLint cache
+.eslintcache
+
+# Storybook
+storybook-static/
+
+# Testing coverage
+coverage/
+
+# Environment variables (already covered by root .gitignore but added for clarity)
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
