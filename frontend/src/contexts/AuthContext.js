@@ -3,8 +3,8 @@ import { authService } from '../services/api';
 
 const initialState = {
   user: null,
-  token: localStorage.getItem('token'),
-  isLoading: true,
+  token: null,
+  isLoading: false,
   isAuthenticated: false,
 };
 
@@ -101,8 +101,12 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Initialize app with clean authentication state
   useEffect(() => {
-    checkAuth();
+    // Always start fresh - clear any existing authentication data
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    dispatch({ type: 'AUTH_FAILURE' });
   }, []);
 
   const value = {

@@ -507,6 +507,12 @@
   font-style: italic;
 }
 
+.presumed-dead-status {
+  color: #dc3545;
+  font-weight: 600;
+  font-style: italic;
+}
+
 .marriage-date {
   color: #6c757d;
   font-style: italic;

@@ -275,29 +275,87 @@ const GenEntry = () => {
                         ))
                       )}
                       
-                      {gedcomStats.centralPerson.deathDate ? (
-                        <div className="event-line">
-                          <span className="event-label">Died:</span>
-                          <span className="event-details">
-                            {gedcomStats.centralPerson.deathDate}
-                            {gedcomStats.centralPerson.deathPlace && (
-                              <span className="event-location">
-                                , <LocationLink 
-                                    location={gedcomStats.centralPerson.deathPlace} 
-                                    personName={`${gedcomStats.centralPerson.givenNames} ${gedcomStats.centralPerson.familyNames}`}
-                                  >
-                                    {gedcomStats.centralPerson.deathPlace}
-                                  </LocationLink>
+{(() => {
+                        // Helper function to calculate age and determine status
+                        const calculateStatus = () => {
+                          if (gedcomStats.centralPerson.deathDate) {
+                            return {
+                              type: 'death',
+                              date: gedcomStats.centralPerson.deathDate,
+                              place: gedcomStats.centralPerson.deathPlace
+                            };
+                          }
+                          
+                          if (!gedcomStats.centralPerson.birthDate) {
+                            return { type: 'living' };
+                          }
+                          
+                          // Parse birth date - handle various GEDCOM date formats
+                          const birthDateStr = gedcomStats.centralPerson.birthDate;
+                          let birthYear = null;
+                          
+                          // Try to extract year from various formats (DD MON YYYY, YYYY, etc.)
+                          const yearMatch = birthDateStr.match(/\b(18|19|20)\d{2}\b/);
+                          if (yearMatch) {
+                            birthYear = parseInt(yearMatch[0], 10);
+                          }
+                          
+                          if (!birthYear) {
+                            return { type: 'living' };
+                          }
+                          
+                          const currentYear = new Date().getFullYear();
+                          const age = currentYear - birthYear;
+                          
+                          if (age > 125) {
+                            return { 
+                              type: 'presumed_dead', 
+                              age: age 
+                            };
+                          }
+                          
+                          return { type: 'living' };
+                        };
+                        
+                        const status = calculateStatus();
+                        
+                        if (status.type === 'death') {
+                          return (
+                            <div className="event-line">
+                              <span className="event-label">Died:</span>
+                              <span className="event-details">
+                                {status.date}
+                                {status.place && (
+                                  <span className="event-location">
+                                    , <LocationLink 
+                                        location={status.place} 
+                                        personName={`${gedcomStats.centralPerson.givenNames} ${gedcomStats.centralPerson.familyNames}`}
+                                      >
+                                        {status.place}
+                                      </LocationLink>
+                                  </span>
+                                )}
                               </span>
-                            )}
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="event-line">
-                          <span className="event-label">Status:</span>
-                          <span className="event-details living-status">(LIVING)</span>
-                        </div>
-                      )}
+                            </div>
+                          );
+                        } else if (status.type === 'presumed_dead') {
+                          return (
+                            <div className="event-line">
+                              <span className="event-label">Status:</span>
+                              <span className="event-details presumed-dead-status">
+                                (PRESUMED DEAD) Age: {status.age}
+                              </span>
+                            </div>
+                          );
+                        } else {
+                          return (
+                            <div className="event-line">
+                              <span className="event-label">Status:</span>
+                              <span className="event-details living-status">(LIVING)</span>
+                            </div>
+                          );
+                        }
+                      })()}
                     </div>
                   </div>
                 </div>

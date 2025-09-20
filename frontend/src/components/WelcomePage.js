@@ -63,7 +63,10 @@ const WelcomePage = () => {
 
             <div className="card card-custom">
               <div className="card-body p-5">
-                <h2 className="text-center text-genealogy mb-4">Welcome Back</h2>
+                <h2 className="text-center text-genealogy mb-4">Please Login</h2>
+              <p className="text-center text-muted mb-4">
+                You must log in with valid credentials to access your genealogy data.
+              </p>
                 
                 {successMessage && (
                   <div className="success-message">
