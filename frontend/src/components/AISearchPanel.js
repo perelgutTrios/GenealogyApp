@@ -102,59 +102,59 @@ const AISearchPanel = ({ person, onResultsFound }) => {
   };
 
   return (
-    <div className=\"ai-search-panel\">
-      <div className=\"ai-panel-header\">
+    <div className="ai-search-panel">
+      <div className="ai-panel-header">
         <h3>
-          <i className=\"bi bi-robot\"></i>
+          <i className="bi bi-robot"></i>
           AI Research Assistant
         </h3>
-        <p className=\"text-muted\">
+        <p className="text-muted">
           Use AI to find additional records and information about {person.givenNames} {person.familyNames}
         </p>
       </div>
 
       {/* Error Display */}
       {error && (
-        <div className=\"alert alert-danger\">
-          <i className=\"bi bi-exclamation-triangle\"></i>
+        <div className="alert alert-danger">
+          <i className="bi bi-exclamation-triangle"></i>
           {error}
         </div>
       )}
 
       {/* Search Actions */}
-      <div className=\"ai-actions\">
+      <div className="ai-actions">
         {!searchQueries ? (
           <button 
-            className=\"btn btn-primary ai-action-btn\"
+            className="btn btn-primary ai-action-btn"
             onClick={generateSearchQueries}
             disabled={isGeneratingQueries}
           >
             {isGeneratingQueries ? (
               <>
-                <span className=\"spinner-border spinner-border-sm me-2\"></span>
+                <span className="spinner-border spinner-border-sm me-2"></span>
                 Generating Search Strategies...
               </>
             ) : (
               <>
-                <i className=\"bi bi-lightbulb me-2\"></i>
+                <i className="bi bi-lightbulb me-2"></i>
                 Generate AI Search Queries
               </>
             )}
           </button>
         ) : (
           <button 
-            className=\"btn btn-success ai-action-btn\"
+            className="btn btn-success ai-action-btn"
             onClick={searchExternalSources}
             disabled={isSearching}
           >
             {isSearching ? (
               <>
-                <span className=\"spinner-border spinner-border-sm me-2\"></span>
+                <span className="spinner-border spinner-border-sm me-2"></span>
                 Searching External Sources...
               </>
             ) : (
               <>
-                <i className=\"bi bi-search me-2\"></i>
+                <i className="bi bi-search me-2"></i>
                 Search External Records
               </>
             )}
@@ -164,41 +164,41 @@ const AISearchPanel = ({ person, onResultsFound }) => {
 
       {/* Search Query Preview */}
       {searchQueries && !isSearching && searchResults.length === 0 && (
-        <div className=\"search-queries-preview\">
+        <div className="search-queries-preview">
           <h5>Generated Search Strategies</h5>
-          <div className=\"query-categories\">
+          <div className="query-categories">
             
             {searchQueries.nameVariations && (
-              <div className=\"query-category\">
-                <h6><i className=\"bi bi-person\"></i> Name Variations ({searchQueries.nameVariations.length})</h6>
-                <div className=\"query-tags\">
+              <div className="query-category">
+                <h6><i className="bi bi-person"></i> Name Variations ({searchQueries.nameVariations.length})</h6>
+                <div className="query-tags">
                   {searchQueries.nameVariations.slice(0, 5).map((name, index) => (
-                    <span key={index} className=\"badge bg-primary me-1 mb-1\">{name}</span>
+                    <span key={index} className="badge bg-primary me-1 mb-1">{name}</span>
                   ))}
                   {searchQueries.nameVariations.length > 5 && (
-                    <span className=\"badge bg-secondary\">+{searchQueries.nameVariations.length - 5} more</span>
+                    <span className="badge bg-secondary">+{searchQueries.nameVariations.length - 5} more</span>
                   )}
                 </div>
               </div>
             )}
 
             {searchQueries.locationVariations && (
-              <div className=\"query-category\">
-                <h6><i className=\"bi bi-geo-alt\"></i> Location Variations ({searchQueries.locationVariations.length})</h6>
-                <div className=\"query-tags\">
+              <div className="query-category">
+                <h6><i className="bi bi-geo-alt"></i> Location Variations ({searchQueries.locationVariations.length})</h6>
+                <div className="query-tags">
                   {searchQueries.locationVariations.slice(0, 3).map((location, index) => (
-                    <span key={index} className=\"badge bg-success me-1 mb-1\">{location}</span>
+                    <span key={index} className="badge bg-success me-1 mb-1">{location}</span>
                   ))}
                 </div>
               </div>
             )}
 
             {searchQueries.recordTypeTargets && (
-              <div className=\"query-category\">
-                <h6><i className=\"bi bi-archive\"></i> Target Record Types ({searchQueries.recordTypeTargets.length})</h6>
-                <div className=\"query-tags\">
+              <div className="query-category">
+                <h6><i className="bi bi-archive"></i> Target Record Types ({searchQueries.recordTypeTargets.length})</h6>
+                <div className="query-tags">
                   {searchQueries.recordTypeTargets.slice(0, 4).map((type, index) => (
-                    <span key={index} className=\"badge bg-info me-1 mb-1\">{type}</span>
+                    <span key={index} className="badge bg-info me-1 mb-1">{type}</span>
                   ))}
                 </div>
               </div>
@@ -209,13 +209,13 @@ const AISearchPanel = ({ person, onResultsFound }) => {
 
       {/* Search Results */}
       {searchResults.length > 0 && (
-        <div className=\"search-results\">
+        <div className="search-results">
           <h5>
-            <i className=\"bi bi-collection\"></i>
+            <i className="bi bi-collection"></i>
             Found {searchResults.length} Potential Records
           </h5>
           
-          <div className=\"results-list\">
+          <div className="results-list">
             {searchResults.map((result, index) => (
               <SearchResultCard 
                 key={result.id} 
@@ -252,44 +252,38 @@ const SearchResultCard = ({ result, index, onAnalyze, onAttach }) => {
     return 'danger';
   };
 
-  const getConfidenceLabel = (confidence) => {
-    if (confidence >= 0.8) return 'High Confidence';
-    if (confidence >= 0.6) return 'Medium Confidence';
-    return 'Low Confidence';
-  };
-
   return (
     <div className={`search-result-card confidence-${getConfidenceColor(result.confidence)}`}>
-      <div className=\"result-header\">
-        <div className=\"result-title\">
+      <div className="result-header">
+        <div className="result-title">
           <h6>{result.name}</h6>
-          <small className=\"text-muted\">{result.source}</small>
+          <small className="text-muted">{result.source}</small>
         </div>
-        <div className=\"confidence-badge\">
+        <div className="confidence-badge">
           <span className={`badge bg-${getConfidenceColor(result.confidence)}`}>
             {Math.round(result.confidence * 100)}%
           </span>
         </div>
       </div>
 
-      <div className=\"result-details\">
+      <div className="result-details">
         {result.birth && (
-          <div className=\"detail-item\">
-            <i className=\"bi bi-calendar\"></i>
+          <div className="detail-item">
+            <i className="bi bi-calendar"></i>
             <span>Born: {result.birth}</span>
           </div>
         )}
         
         {result.location && (
-          <div className=\"detail-item\">
-            <i className=\"bi bi-geo-alt\"></i>
+          <div className="detail-item">
+            <i className="bi bi-geo-alt"></i>
             <span>Location: {result.location}</span>
           </div>
         )}
         
         {result.additionalInfo && (
-          <div className=\"detail-item\">
-            <i className=\"bi bi-info-circle\"></i>
+          <div className="detail-item">
+            <i className="bi bi-info-circle"></i>
             <span>{result.additionalInfo}</span>
           </div>
         )}
@@ -297,20 +291,20 @@ const SearchResultCard = ({ result, index, onAnalyze, onAttach }) => {
 
       {/* Matching Factors */}
       {result.confidenceAnalysis?.matchingFactors && result.confidenceAnalysis.matchingFactors.length > 0 && (
-        <div className=\"matching-factors\">
-          <small className=\"text-muted\">Matches: </small>
+        <div className="matching-factors">
+          <small className="text-muted">Matches: </small>
           {result.confidenceAnalysis.matchingFactors.map((factor, idx) => (
-            <span key={idx} className=\"badge bg-secondary me-1\">{factor}</span>
+            <span key={idx} className="badge bg-secondary me-1">{factor}</span>
           ))}
         </div>
       )}
 
-      <div className=\"result-actions\">
+      <div className="result-actions">
         <button 
-          className=\"btn btn-sm btn-outline-primary\"
+          className="btn btn-sm btn-outline-primary"
           onClick={onAnalyze}
         >
-          <i className=\"bi bi-search\"></i>
+          <i className="bi bi-search"></i>
           Analyze Match
         </button>
         
@@ -319,18 +313,18 @@ const SearchResultCard = ({ result, index, onAnalyze, onAttach }) => {
           onClick={onAttach}
           disabled={result.confidence < 0.6}
         >
-          <i className=\"bi bi-link-45deg\"></i>
+          <i className="bi bi-link-45deg"></i>
           {result.confidence >= 0.8 ? 'Auto-Attach' : 'Review & Attach'}
         </button>
 
         {result.url && (
           <a 
             href={result.url} 
-            target=\"_blank\" 
-            rel=\"noopener noreferrer\"
-            className=\"btn btn-sm btn-outline-info\"
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="btn btn-sm btn-outline-info"
           >
-            <i className=\"bi bi-box-arrow-up-right\"></i>
+            <i className="bi bi-box-arrow-up-right"></i>
             View Source
           </a>
         )}
@@ -344,28 +338,28 @@ const SearchResultCard = ({ result, index, onAnalyze, onAttach }) => {
  */
 const AnalysisModal = ({ result, person, onClose, onAttach }) => {
   return (
-    <div className=\"analysis-modal-overlay\" onClick={onClose}>
-      <div className=\"analysis-modal\" onClick={(e) => e.stopPropagation()}>
-        <div className=\"modal-header\">
+    <div className="analysis-modal-overlay" onClick={onClose}>
+      <div className="analysis-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
           <h4>AI Match Analysis</h4>
-          <button className=\"btn-close\" onClick={onClose}>×</button>
+          <button className="btn-close" onClick={onClose}>×</button>
         </div>
 
-        <div className=\"modal-body\">
-          <div className=\"comparison-section\">
-            <div className=\"row\">
-              <div className=\"col-md-6\">
+        <div className="modal-body">
+          <div className="comparison-section">
+            <div className="row">
+              <div className="col-md-6">
                 <h6>Your Record</h6>
-                <div className=\"person-summary\">
+                <div className="person-summary">
                   <p><strong>{person.givenNames} {person.familyNames}</strong></p>
                   <p>Born: {person.birthDate || 'Unknown'}</p>
                   <p>Location: {person.birthPlace || 'Unknown'}</p>
                 </div>
               </div>
               
-              <div className=\"col-md-6\">
+              <div className="col-md-6">
                 <h6>Potential Match</h6>
-                <div className=\"person-summary\">
+                <div className="person-summary">
                   <p><strong>{result.name}</strong></p>
                   <p>Born: {result.birth || 'Unknown'}</p>
                   <p>Location: {result.location || 'Unknown'}</p>
@@ -377,17 +371,17 @@ const AnalysisModal = ({ result, person, onClose, onAttach }) => {
 
           {/* Detailed Analysis */}
           {result.detailedAnalysis && (
-            <div className=\"detailed-analysis\">
+            <div className="detailed-analysis">
               <h6>Analysis Results</h6>
               
               {result.detailedAnalysis.ai && (
-                <div className=\"ai-analysis\">
-                  <h7>AI Analysis</h7>
-                  <p><strong>Confidence:</strong> {Math.round(result.detailedAnalysis.ai.confidence * 100)}%</p>
-                  <p><strong>Reasoning:</strong> {result.detailedAnalysis.ai.reasoning}</p>
+                <div className="ai-analysis">
+                  <strong>AI Analysis:</strong>
+                  <p>Confidence: {Math.round(result.detailedAnalysis.ai.confidence * 100)}%</p>
+                  <p>Reasoning: {result.detailedAnalysis.ai.reasoning}</p>
                   
                   {result.detailedAnalysis.ai.matchingFactors && (
-                    <div className=\"factors\">
+                    <div className="factors">
                       <strong>Matching Factors:</strong>
                       <ul>
                         {result.detailedAnalysis.ai.matchingFactors.map((factor, idx) => (
@@ -399,8 +393,8 @@ const AnalysisModal = ({ result, person, onClose, onAttach }) => {
                 </div>
               )}
 
-              <div className=\"final-recommendation\">
-                <h7>Recommendation</h7>
+              <div className="final-recommendation">
+                <strong>Recommendation:</strong>
                 <div className={`recommendation-badge ${result.detailedAnalysis.finalRecommendation?.action}`}>
                   {result.detailedAnalysis.finalRecommendation?.action?.toUpperCase()}: {result.detailedAnalysis.finalRecommendation?.reasoning}
                 </div>
@@ -409,16 +403,16 @@ const AnalysisModal = ({ result, person, onClose, onAttach }) => {
           )}
         </div>
 
-        <div className=\"modal-footer\">
-          <button className=\"btn btn-secondary\" onClick={onClose}>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onClose}>
             Close
           </button>
           <button 
-            className=\"btn btn-success\" 
+            className="btn btn-success" 
             onClick={onAttach}
             disabled={result.detailedAnalysis?.finalRecommendation?.action === 'reject'}
           >
-            <i className=\"bi bi-link-45deg\"></i>
+            <i className="bi bi-link-45deg"></i>
             Attach Record
           </button>
         </div>
