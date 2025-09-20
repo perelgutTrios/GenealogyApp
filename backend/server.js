@@ -8,6 +8,7 @@ require('dotenv').config();
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const gedcomRoutes = require('./routes/gedcom');
+const aiResearchRoutes = require('./routes/aiResearch');
 
 const app = express();
 
@@ -40,6 +41,7 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/gedcom', gedcomRoutes);
+app.use('/api/ai-research', aiResearchRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

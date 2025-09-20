@@ -99,6 +99,48 @@ export const gedcomService = {
   },
 };
 
+// AI Research Service for genealogical AI features
+export const aiResearchService = {
+  /**
+   * Generate AI-powered search queries for a person
+   */
+  generateQueries: async (personId) => {
+    const response = await api.post('/ai-research/generate-queries', { personId });
+    return response.data;
+  },
+
+  /**
+   * Search external sources for records
+   */
+  searchExternal: async (personId, searchQueries) => {
+    const response = await api.post('/ai-research/search-external', { 
+      personId, 
+      searchQueries 
+    });
+    return response.data;
+  },
+
+  /**
+   * Analyze a specific record match using AI
+   */
+  analyzeMatch: async (personId, recordId, recordData) => {
+    const response = await api.post('/ai-research/analyze-match', { 
+      personId, 
+      recordId, 
+      recordData 
+    });
+    return response.data;
+  },
+
+  /**
+   * Get research suggestions for a person
+   */
+  getResearchSuggestions: async (personId) => {
+    const response = await api.get(`/ai-research/suggestions/${personId}`);
+    return response.data;
+  }
+};
+
 // Helper function to handle API errors
 export const handleApiError = (error) => {
   if (error.response?.data) {
