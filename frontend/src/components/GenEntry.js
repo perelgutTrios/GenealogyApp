@@ -8,6 +8,9 @@ const GenEntry = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [currentPersonId, setCurrentPersonId] = useState(null);
+  const [showLocationPopup, setShowLocationPopup] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState(null);
+  const [selectedPersonName, setSelectedPersonName] = useState(null);
 
   useEffect(() => {
     loadGedcomStats();
@@ -63,6 +66,50 @@ const GenEntry = () => {
   const handlePersonClick = async (personId) => {
     console.log('👤 Loading person:', personId);
     await loadGedcomStats(personId);
+  };
+
+  const handleLocationClick = (location, personName) => {
+    console.log('🌍 Location clicked:', location, 'for person:', personName);
+    setSelectedLocation(location);
+    setSelectedPersonName(personName);
+    setShowLocationPopup(true);
+  };
+
+  const openLocationLink = (type) => {
+    const encodedLocation = encodeURIComponent(selectedLocation);
+    const encodedPersonName = encodeURIComponent(selectedPersonName);
+    let url;
+
+    switch (type) {
+      case 'wikipedia':
+        url = `https://en.wikipedia.org/wiki/Special:Search/${encodedLocation}`;
+        break;
+      case 'maps':
+        url = `https://www.google.com/maps/search/${encodedLocation}`;
+        break;
+      case 'search':
+        url = `https://www.google.com/search?q=${encodedPersonName}+${encodedLocation}`;
+        break;
+      default:
+        return;
+    }
+
+    window.open(url, '_blank');
+    setShowLocationPopup(false);
+  };
+
+  const LocationLink = ({ location, personName, children }) => {
+    if (!location) return children;
+    
+    return (
+      <button 
+        className="location-link" 
+        onClick={() => handleLocationClick(location, personName)}
+        title={`Click to explore ${location}`}
+      >
+        {children || location}
+      </button>
+    );
   };
 
   const handleLogout = async () => {
@@ -147,7 +194,14 @@ const GenEntry = () => {
                         <span className="event-details">
                           {gedcomStats.centralPerson.birthDate || 'UNK'}
                           {gedcomStats.centralPerson.birthPlace && (
-                            <span className="event-location">, {gedcomStats.centralPerson.birthPlace}</span>
+                            <span className="event-location">
+                              , <LocationLink 
+                                  location={gedcomStats.centralPerson.birthPlace} 
+                                  personName={`${gedcomStats.centralPerson.givenNames} ${gedcomStats.centralPerson.familyNames}`}
+                                >
+                                  {gedcomStats.centralPerson.birthPlace}
+                                </LocationLink>
+                            </span>
                           )}
                         </span>
                       </div>
@@ -192,7 +246,15 @@ const GenEntry = () => {
                                 <span className="marriage-date"> on {spouse.marriageDate}</span>
                               )}
                               {spouse.marriagePlace && (
-                                <span className="event-location"> in {spouse.marriagePlace}</span>
+                                <span className="event-location">
+                                  {' in '}
+                                  <LocationLink 
+                                    location={spouse.marriagePlace} 
+                                    personName={`${gedcomStats.centralPerson.givenNames} ${gedcomStats.centralPerson.familyNames}`}
+                                  >
+                                    {spouse.marriagePlace}
+                                  </LocationLink>
+                                </span>
                               )}
                             </span>
                           </div>
@@ -219,7 +281,14 @@ const GenEntry = () => {
                           <span className="event-details">
                             {gedcomStats.centralPerson.deathDate}
                             {gedcomStats.centralPerson.deathPlace && (
-                              <span className="event-location">, {gedcomStats.centralPerson.deathPlace}</span>
+                              <span className="event-location">
+                                , <LocationLink 
+                                    location={gedcomStats.centralPerson.deathPlace} 
+                                    personName={`${gedcomStats.centralPerson.givenNames} ${gedcomStats.centralPerson.familyNames}`}
+                                  >
+                                    {gedcomStats.centralPerson.deathPlace}
+                                  </LocationLink>
+                              </span>
                             )}
                           </span>
                         </div>
@@ -387,6 +456,50 @@ const GenEntry = () => {
           </div>
         </div>
       </div>
+
+      {/* Location Popup Modal */}
+      {showLocationPopup && (
+        <div className="location-popup-overlay" onClick={() => setShowLocationPopup(false)}>
+          <div className="location-popup" onClick={(e) => e.stopPropagation()}>
+            <div className="location-popup-header">
+              <h3>{selectedLocation}</h3>
+              <button 
+                className="location-popup-close" 
+                onClick={() => setShowLocationPopup(false)}
+                title="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="location-popup-content">
+              <p>Explore this location:</p>
+              <div className="location-options">
+                <button 
+                  className="location-option-btn wikipedia-btn" 
+                  onClick={() => openLocationLink('wikipedia')}
+                >
+                  <i className="bi bi-book"></i>
+                  Wikipedia Page
+                </button>
+                <button 
+                  className="location-option-btn maps-btn" 
+                  onClick={() => openLocationLink('maps')}
+                >
+                  <i className="bi bi-geo-alt-fill"></i>
+                  Google Maps
+                </button>
+                <button 
+                  className="location-option-btn search-btn" 
+                  onClick={() => openLocationLink('search')}
+                >
+                  <i className="bi bi-search"></i>
+                  Google Search: {selectedPersonName}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
