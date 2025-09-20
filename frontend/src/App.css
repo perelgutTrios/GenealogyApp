@@ -171,3 +171,255 @@
   padding: 1rem;
   margin: 1rem 0;
 }
+
+/* Central Person Display Styles */
+/* Genealogical Person Display */
+.genealogy-person-card {
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin: 0.5rem 0;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  transition: all 0.2s ease;
+}
+
+.genealogy-person-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+/* Gender-based background colors */
+.genealogy-person-card.gender-male {
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+  border-color: #2196f3;
+}
+
+.genealogy-person-card.gender-female {
+  background: linear-gradient(135deg, #fce4ec 0%, #f8bbd9 100%);
+  border-color: #e91e63;
+}
+
+.genealogy-person-card.gender-unknown {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-color: #dee2e6;
+}
+
+.person-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.person-avatar {
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.person-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.person-title-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+
+.person-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #343a40;
+}
+
+.person-gender {
+  font-size: 0.85rem;
+  color: #6c757d;
+  font-weight: 500;
+}
+
+.person-id {
+  font-size: 0.8rem;
+  color: #6c757d;
+  font-family: 'Courier New', monospace;
+  margin-left: auto;
+}
+
+.person-events {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.event-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.event-label {
+  font-weight: 600;
+  color: #495057;
+  min-width: 50px;
+}
+
+.event-details {
+  color: #343a40;
+  flex: 1;
+}
+
+.event-location {
+  color: #6c757d;
+}
+
+.person-link {
+  background: none;
+  border: none;
+  color: #0d6efd;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  font-size: inherit;
+  font-weight: 500;
+}
+
+.person-link:hover {
+  color: #0a58ca;
+  text-decoration: none;
+  background-color: rgba(13, 110, 253, 0.1);
+  border-radius: 3px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+}
+
+.living-status {
+  color: #198754;
+  font-weight: 600;
+  font-style: italic;
+}
+
+.marriage-date {
+  color: #6c757d;
+  font-style: italic;
+}
+
+.detail-icon {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #667eea;
+  font-size: 1rem;
+}
+
+.detail-label {
+  font-weight: 600;
+  color: #495057;
+  min-width: 80px;
+}
+
+.detail-value {
+  color: #6c757d;
+  flex: 1;
+}
+
+.gender-male {
+  color: #007bff;
+}
+
+.gender-female {
+  color: #e83e8c;
+}
+
+.no-central-person {
+  text-align: center;
+  color: #6c757d;
+  font-style: italic;
+  padding: 2rem;
+  background: rgba(108, 117, 125, 0.1);
+  border-radius: 10px;
+  margin: 1rem 0;
+}
+
+/* Logout Button Styles */
+.btn-logout {
+  background-color: #f8d7da;
+  border: 2px solid #f5c6cb;
+  color: #721c24;
+  font-weight: 500;
+  border-radius: 25px;
+  padding: 8px 20px;
+  transition: all 0.3s ease;
+}
+
+.btn-logout:hover {
+  background-color: #f1b0b7;
+  border-color: #f1b0b7;
+  color: #491217;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(220, 53, 69, 0.3);
+}
+
+.btn-logout:focus {
+  background-color: #f1b0b7;
+  border-color: #f1b0b7;
+  color: #491217;
+  box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+}
+
+/* Responsive design for genealogical person display */
+@media (max-width: 768px) {
+  .genealogy-person-card {
+    padding: 0.5rem;
+    margin: 0.25rem 0;
+  }
+
+  .person-header {
+    gap: 0.5rem;
+  }
+
+  .person-avatar {
+    width: 28px;
+    height: 28px;
+    font-size: 0.9rem;
+  }
+
+  .person-title-line {
+    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+
+  .person-name {
+    font-size: 1rem;
+  }
+
+  .person-gender {
+    font-size: 0.8rem;
+  }
+
+  .person-id {
+    font-size: 0.75rem;
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+
+  .event-line {
+    font-size: 0.85rem;
+  }
+
+  .event-label {
+    min-width: 45px;
+  }
+}

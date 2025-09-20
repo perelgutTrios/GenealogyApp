@@ -1,27 +1,68 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { gedcomService, handleApiError } from '../services/api';
+
 const GenEntry = () => {
   const { user, logout } = useAuth();
   const [gedcomStats, setGedcomStats] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [currentPersonId, setCurrentPersonId] = useState(null);
 
   useEffect(() => {
     loadGedcomStats();
   }, []);
 
-  const loadGedcomStats = async () => {
+  const loadGedcomStats = async (personId = null) => {
     try {
       setIsLoading(true);
-      const stats = await gedcomService.getStats();
+      console.log('🔍 Fetching GEDCOM stats for person:', personId || 'default user');
+      
+      let stats;
+      if (personId) {
+        // Load specific person by ID
+        stats = await loadPersonById(personId);
+      } else {
+        // Load default user's stats
+        stats = await gedcomService.getStats();
+      }
+      
+      console.log('� Stats received:', stats);
+      console.log('👤 Central person:', stats?.centralPerson);
       setGedcomStats(stats);
+      setCurrentPersonId(stats?.centralPerson?.id);
     } catch (err) {
+      console.error('❌ Error fetching stats:', err);
       const apiError = handleApiError(err);
       setError(apiError.message);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const loadPersonById = async (personId) => {
+    try {
+      const response = await fetch(`/api/gedcom/person/${personId}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to load person: ${response.statusText}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('❌ Error loading person by ID:', error);
+      throw error;
+    }
+  };
+
+  const handlePersonClick = async (personId) => {
+    console.log('👤 Loading person:', personId);
+    await loadGedcomStats(personId);
   };
 
   const handleLogout = async () => {
@@ -48,28 +89,19 @@ const GenEntry = () => {
             <i className="bi bi-tree-fill me-2"></i>
             Steve's Genealogy Tool
           </span>
-          <div className="navbar-nav ms-auto">
-            <div className="nav-item dropdown">
-              <a
-                className="nav-link dropdown-toggle text-white"
-                href="#"
-                id="navbarDropdown"
-                role="button"
-                data-bs-toggle="dropdown"
-                aria-expanded="false"
-              >
-                <i className="bi bi-person-circle me-1"></i>
-                {user?.givenNames} {user?.familyNames}
-              </a>
-              <ul className="dropdown-menu">
-                <li>
-                  <button className="dropdown-item" onClick={handleLogout}>
-                    <i className="bi bi-box-arrow-right me-2"></i>
-                    Logout
-                  </button>
-                </li>
-              </ul>
-            </div>
+          <div className="navbar-nav ms-auto d-flex align-items-center">
+            <span className="text-white me-3">
+              <i className="bi bi-person-circle me-1"></i>
+              {user?.givenNames} {user?.familyNames}
+            </span>
+            <button 
+              className="btn btn-logout" 
+              onClick={handleLogout}
+              title="Logout"
+            >
+              <i className="bi bi-box-arrow-right me-1"></i>
+              Logout
+            </button>
           </div>
         </div>
       </nav>
@@ -90,6 +122,159 @@ const GenEntry = () => {
                 </p>
               </div>
             </div>
+
+            {/* Genealogical Person Display */}
+            {gedcomStats?.centralPerson ? (
+              <div className={`genealogy-person-card ${gedcomStats.centralPerson.sex === 'M' ? 'gender-male' : gedcomStats.centralPerson.sex === 'F' ? 'gender-female' : 'gender-unknown'}`}>
+                <div className="person-header">
+                  <div className="person-avatar">
+                    <i className="bi bi-person-fill"></i>
+                  </div>
+                  <div className="person-main">
+                    <div className="person-title-line">
+                      <span className="person-name">
+                        {gedcomStats.centralPerson.givenNames || 'UNK'} {gedcomStats.centralPerson.familyNames || 'UNK'}
+                      </span>
+                      {gedcomStats.centralPerson.sex && (
+                        <span className="person-gender">({gedcomStats.centralPerson.sex})</span>
+                      )}
+                      <span className="person-id">#{gedcomStats.centralPerson.id}</span>
+                    </div>
+                    
+                    <div className="person-events">
+                      <div className="event-line">
+                        <span className="event-label">Born:</span>
+                        <span className="event-details">
+                          {gedcomStats.centralPerson.birthDate || 'UNK'}
+                          {gedcomStats.centralPerson.birthPlace && (
+                            <span className="event-location">, {gedcomStats.centralPerson.birthPlace}</span>
+                          )}
+                        </span>
+                      </div>
+                      
+                      {/* Parents Information */}
+                      {gedcomStats.centralPerson.parents && (
+                        <>
+                          {gedcomStats.centralPerson.parents.father && (
+                            <div className="event-line">
+                              <span className="event-label">Father:</span>
+                              <span className="event-details">
+                                <button className="person-link" onClick={() => handlePersonClick(gedcomStats.centralPerson.parents.father.id)}>
+                                  {gedcomStats.centralPerson.parents.father.givenNames} {gedcomStats.centralPerson.parents.father.familyNames}
+                                </button>
+                              </span>
+                            </div>
+                          )}
+                          
+                          {gedcomStats.centralPerson.parents.mother && (
+                            <div className="event-line">
+                              <span className="event-label">Mother:</span>
+                              <span className="event-details">
+                                <button className="person-link" onClick={() => handlePersonClick(gedcomStats.centralPerson.parents.mother.id)}>
+                                  {gedcomStats.centralPerson.parents.mother.givenNames} {gedcomStats.centralPerson.parents.mother.familyNames}
+                                </button>
+                              </span>
+                            </div>
+                          )}
+                        </>
+                      )}
+
+                      {/* Marriage/Spouse Information */}
+                      {gedcomStats.centralPerson.spouses && gedcomStats.centralPerson.spouses.length > 0 && (
+                        gedcomStats.centralPerson.spouses.map((spouse, index) => (
+                          <div key={spouse.id} className="event-line">
+                            <span className="event-label">Married:</span>
+                            <span className="event-details">
+                              <button className="person-link" onClick={() => handlePersonClick(spouse.id)}>
+                                {spouse.givenNames} {spouse.familyNames}
+                              </button>
+                              {spouse.marriageDate && (
+                                <span className="marriage-date"> on {spouse.marriageDate}</span>
+                              )}
+                              {spouse.marriagePlace && (
+                                <span className="event-location"> in {spouse.marriagePlace}</span>
+                              )}
+                            </span>
+                          </div>
+                        ))
+                      )}
+
+                      {/* Children Information */}
+                      {gedcomStats.centralPerson.children && gedcomStats.centralPerson.children.length > 0 && (
+                        gedcomStats.centralPerson.children.map((child, index) => (
+                          <div key={child.id} className="event-line">
+                            <span className="event-label">{child.relationshipLabel}:</span>
+                            <span className="event-details">
+                              <button className="person-link" onClick={() => handlePersonClick(child.id)}>
+                                {child.givenNames} {child.familyNames}
+                              </button>
+                            </span>
+                          </div>
+                        ))
+                      )}
+                      
+                      {gedcomStats.centralPerson.deathDate ? (
+                        <div className="event-line">
+                          <span className="event-label">Died:</span>
+                          <span className="event-details">
+                            {gedcomStats.centralPerson.deathDate}
+                            {gedcomStats.centralPerson.deathPlace && (
+                              <span className="event-location">, {gedcomStats.centralPerson.deathPlace}</span>
+                            )}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="event-line">
+                          <span className="event-label">Status:</span>
+                          <span className="event-details living-status">(LIVING)</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : gedcomStats && (
+              <div 
+                style={{
+                  backgroundColor: '#f8d7da',
+                  border: '2px solid #f5c6cb',
+                  color: '#721c24',
+                  borderRadius: '8px',
+                  padding: '1.5rem',
+                  marginBottom: '1rem',
+                  boxShadow: '0 0.25rem 0.5rem rgba(220, 53, 69, 0.15)'
+                }}
+                role="alert"
+              >
+                <div className="d-flex align-items-center">
+                  <i 
+                    className="bi bi-exclamation-triangle fa-2x me-3"
+                    style={{ color: '#dc3545' }}
+                  ></i>
+                  <div>
+                    <h5 
+                      style={{ 
+                        color: '#721c24', 
+                        fontWeight: '600', 
+                        marginBottom: '0.5rem',
+                        fontSize: '1.2rem'
+                      }}
+                    >
+                      No Central Person Found
+                    </h5>
+                    <p 
+                      style={{ 
+                        color: '#721c24', 
+                        marginBottom: '0', 
+                        lineHeight: '1.5' 
+                      }}
+                    >
+                      No central person found in your GEDCOM file. This may occur if the file format is unusual or if no individuals were properly parsed from the genealogy data.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* GEDCOM Database Info */}
             {gedcomStats && (
