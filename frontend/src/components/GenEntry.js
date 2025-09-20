@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { gedcomService, handleApiError } from '../services/api';
+import AISearchPanel from './AISearchPanel';
 
 const GenEntry = () => {
   const { user, logout } = useAuth();
@@ -401,6 +402,14 @@ const GenEntry = () => {
                   </div>
                 </div>
               </div>
+            )}
+
+            {/* AI-Enhanced Research Panel */}
+            {gedcomStats?.centralPerson && (
+              <AISearchPanel 
+                person={gedcomStats.centralPerson}
+                onPersonSelect={handlePersonClick}
+              />
             )}
 
             {/* GEDCOM Database Info */}
