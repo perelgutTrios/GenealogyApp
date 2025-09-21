@@ -21,9 +21,9 @@ const confidenceScorer = new ConfidenceScorer();
  */
 router.get('/debug', authMiddleware, async (req, res) => {
   try {
-    console.log('🔍 Debug - User ID from token:', req.user?.userId);
+    console.log('🔍 Debug - User ID from token:', req.user?._id);
     
-    const user = await User.findById(req.user.userId);
+    const user = await User.findById(req.user._id);
     console.log('🔍 Debug - User found:', user ? 'Yes' : 'No');
     
     if (user) {
@@ -57,12 +57,12 @@ router.post('/generate-queries', authMiddleware, async (req, res) => {
     }
 
     console.log(`🤖 Generating AI search queries for person: ${personId}`);
-    console.log(`👤 Authenticated user ID: ${req.user?.userId}`);
+    console.log(`👤 Authenticated user ID: ${req.user?._id}`);
 
     // Get user's GEDCOM database
-    const user = await User.findById(req.user.userId);
+    const user = await User.findById(req.user._id);
     if (!user) {
-      console.error('❌ User not found for ID:', req.user.userId);
+      console.error('❌ User not found for ID:', req.user._id);
       return res.status(404).json({ message: 'User not found. Please log in again.' });
     }
 
@@ -138,7 +138,7 @@ router.post('/search-external', authMiddleware, async (req, res) => {
     console.log(`🔍 Searching external sources for person: ${personId}`);
 
     // Get person data (similar to generate-queries)
-    const user = await User.findById(req.user.userId);
+    const user = await User.findById(req.user._id);
     const gedcomDb = await GedcomDatabase.findOne({ userId: user._id });
     
     if (!gedcomDb || !user.encryptionKey) {
@@ -230,7 +230,7 @@ router.post('/analyze-match', authMiddleware, async (req, res) => {
     console.log(`🧠 AI analyzing match between person ${personId} and record ${recordId}`);
 
     // Get person data (similar pattern as above)
-    const user = await User.findById(req.user.userId);
+    const user = await User.findById(req.user._id);
     const gedcomDb = await GedcomDatabase.findOne({ userId: user._id });
     
     if (!gedcomDb || !user.encryptionKey) {
@@ -303,7 +303,7 @@ router.get('/suggestions/:personId', authMiddleware, async (req, res) => {
     console.log(`💡 Generating research suggestions for person: ${personId}`);
 
     // Get person data (similar pattern)
-    const user = await User.findById(req.user.userId);
+    const user = await User.findById(req.user._id);
     const gedcomDb = await GedcomDatabase.findOne({ userId: user._id });
     
     if (!gedcomDb || !user.encryptionKey) {

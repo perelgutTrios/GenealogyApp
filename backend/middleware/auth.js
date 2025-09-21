@@ -17,6 +17,7 @@ const authMiddleware = async (req, res, next) => {
     }
 
     req.user = user;
+    req.user.userId = user._id;  // Ensure userId is available for backward compatibility
     next();
   } catch (error) {
     console.error('Auth middleware error:', error);
