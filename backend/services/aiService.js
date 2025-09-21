@@ -1,6 +1,7 @@
 const OpenAI = require('openai');
 const axios = require('axios');
 const { NameMatchingService } = require('./nameMatchingService');
+const { GenealogyValidationService } = require('./genealogyValidationService');
 
 class AIGenealogyService {
   constructor() {
@@ -12,6 +13,9 @@ class AIGenealogyService {
     
     // Initialize advanced name matching service
     this.nameMatchingService = new NameMatchingService();
+    
+    // Initialize genealogy validation service
+    this.validationService = new GenealogyValidationService();
   }
 
   /**
@@ -329,16 +333,36 @@ Consider:
   }
 
   /**
-   * Fallback rule-based match analysis
+   * Enhanced fallback rule-based match analysis with comprehensive validation
    */
   fallbackMatchAnalysis(person, potentialMatch) {
-    console.log('🔄 Using fallback match analysis');
+    console.log('🔄 Using enhanced fallback match analysis with validation');
     
     let confidence = 0;
     const matchingFactors = [];
     const concerns = [];
     
-    // CRITICAL: Check for mock/test/placeholder data first
+    // STEP 1: Comprehensive person record validation
+    console.log('🛡️ Running comprehensive person validation...');
+    const personValidation = this.validationService.validatePersonRecord(person);
+    const matchValidation = this.validationService.validatePersonRecord({
+      givenNames: this.extractGivenName(potentialMatch.name),
+      familyNames: this.extractFamilyName(potentialMatch.name),
+      birthDate: potentialMatch.birth,
+      deathDate: potentialMatch.death,
+      birthPlace: potentialMatch.location
+    });
+    
+    // Add validation concerns
+    if (personValidation.issues.length > 0) {
+      concerns.push(`Source record issues: ${personValidation.issues.map(i => i.message).join(', ')}`);
+    }
+    
+    if (matchValidation.issues.length > 0) {
+      concerns.push(`Match record issues: ${matchValidation.issues.map(i => i.message).join(', ')}`);
+    }
+    
+    // STEP 2: Check for mock/test/placeholder data
     const mockDataFlags = this.detectMockData(potentialMatch);
     if (mockDataFlags.length > 0) {
       concerns.push(...mockDataFlags);
@@ -398,19 +422,50 @@ Consider:
       if (locationScore > 0.7) matchingFactors.push('location match');
     }
     
-    // Determine recommendation with mock data consideration
+    // STEP 5: Apply validation scores to confidence
+    const avgValidationScore = (personValidation.validationScore + matchValidation.validationScore) / 2;
+    if (!mockDataFlags.length) {
+      confidence *= avgValidationScore; // Reduce confidence based on validation issues
+    }
+    
+    // STEP 6: Data quality assessment impact
+    const avgQualityScore = (
+      (personValidation.qualityAssessment?.score || 0.5) + 
+      (matchValidation.qualityAssessment?.score || 0.5)
+    ) / 2;
+    
+    if (!mockDataFlags.length) {
+      confidence *= (0.7 + (avgQualityScore * 0.3)); // Quality impacts confidence
+    }
+    
+    // Add quality insights to matching factors
+    if (avgQualityScore > 0.8) {
+      matchingFactors.push('high data quality');
+    } else if (avgQualityScore < 0.5) {
+      concerns.push('Low data quality detected');
+    }
+    
+    // STEP 7: Determine recommendation with comprehensive analysis
     let recommendation;
     if (mockDataFlags.length > 0) {
       recommendation = 'reject';
+    } else if (personValidation.issues.filter(i => i.severity === 'error').length > 0 || 
+               matchValidation.issues.filter(i => i.severity === 'error').length > 0) {
+      recommendation = 'reject'; // Reject if validation errors
     } else {
       recommendation = confidence > 0.8 ? 'accept' : confidence > 0.6 ? 'review' : 'reject';
     }
     
-    // Enhanced reasoning with mock data detection
-    let reasoning = `Rule-based analysis using name (${Math.round(nameScore * 100)}%), date, and location matching`;
+    // Enhanced reasoning with comprehensive analysis
+    let reasoning = `Enhanced analysis: Name matching (${Math.round(nameScore * 100)}%), ` +
+                   `validation score (${Math.round(avgValidationScore * 100)}%), ` +
+                   `data quality (${Math.round(avgQualityScore * 100)}%)`;
+    
     if (mockDataFlags.length > 0) {
       reasoning += ` - FLAGGED: Contains mock/test data patterns`;
     }
+    
+    console.log(`🎯 Enhanced analysis complete: ${Math.round(confidence * 100)}% confidence, ${recommendation} recommendation`);
     
     return {
       confidence: Math.min(confidence, 1.0),
@@ -418,8 +473,22 @@ Consider:
       matchingFactors,
       concerns: concerns.length > 0 ? concerns : (confidence < 0.6 ? ['Low overall match confidence'] : []),
       recommendation,
+      validation: {
+        personValidation: {
+          score: personValidation.validationScore,
+          quality: personValidation.qualityAssessment,
+          issues: personValidation.issues.length,
+          warnings: personValidation.warnings.length
+        },
+        matchValidation: {
+          score: matchValidation.validationScore,
+          quality: matchValidation.qualityAssessment,
+          issues: matchValidation.issues.length,
+          warnings: matchValidation.warnings.length
+        }
+      },
       analyzedAt: new Date(),
-      method: 'fallback'
+      method: 'enhanced_fallback'
     };
   }
 
