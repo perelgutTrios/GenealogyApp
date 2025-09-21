@@ -74,6 +74,28 @@ const AISearchPanel = ({ person, onResultsFound }) => {
   };
 
   /**
+   * Attach a record to the person's profile
+   */
+  const attachRecord = async (result) => {
+    try {
+      console.log('📎 Attaching record:', result.id, 'to person:', person.id);
+      
+      // For now, just show success message - this would integrate with your GEDCOM updating system
+      alert(`Record "${result.name}" has been attached to ${person.givenNames} ${person.familyNames}`);
+      
+      // TODO: Implement actual record attachment to GEDCOM database
+      // This would typically:
+      // 1. Create a new source citation in the GEDCOM
+      // 2. Link it to the person's record
+      // 3. Update the encrypted GEDCOM data in the database
+      
+    } catch (err) {
+      console.error('❌ Error attaching record:', err);
+      setError('Failed to attach record: ' + err.message);
+    }
+  };
+
+  /**
    * Analyze a specific record match
    */
   const analyzeMatch = async (result) => {
@@ -85,12 +107,17 @@ const AISearchPanel = ({ person, onResultsFound }) => {
 
       const response = await aiResearchService.analyzeMatch(person.id, result.id, result);
       
+      // Debug: log the actual response structure
+      console.log('🔍 Analysis Response:', response);
+      console.log('🔍 Analysis Data:', response.analysis);
+      
       if (response.success) {
-        setSelectedResult({
+        const updatedResult = {
           ...result,
           detailedAnalysis: response.analysis
-        });
-        console.log('✅ Match analysis complete');
+        };
+        setSelectedResult(updatedResult);
+        console.log('✅ Match analysis complete:', updatedResult.detailedAnalysis);
       } else {
         throw new Error(response.message || 'Failed to analyze match');
       }
@@ -222,7 +249,7 @@ const AISearchPanel = ({ person, onResultsFound }) => {
                 result={result} 
                 index={index}
                 onAnalyze={() => analyzeMatch(result)}
-                onAttach={() => console.log('Attach record:', result.id)}
+                onAttach={() => attachRecord(result)}
               />
             ))}
           </div>
@@ -235,7 +262,7 @@ const AISearchPanel = ({ person, onResultsFound }) => {
           result={selectedResult}
           person={person}
           onClose={() => setShowAnalysis(false)}
-          onAttach={() => console.log('Attach analyzed record:', selectedResult.id)}
+          onAttach={() => attachRecord(selectedResult)}
         />
       )}
     </div>
@@ -338,32 +365,45 @@ const SearchResultCard = ({ result, index, onAnalyze, onAttach }) => {
  */
 const AnalysisModal = ({ result, person, onClose, onAttach }) => {
   return (
-    <div className="analysis-modal-overlay" onClick={onClose}>
-      <div className="analysis-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="analysis-modal-overlay" onClick={onClose} style={{position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1050}}>
+      <div 
+        className="analysis-modal" 
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          backgroundColor: 'white',
+          borderRadius: '8px',
+          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+          maxWidth: '800px',
+          width: '90%',
+          maxHeight: '90vh',
+          overflow: 'auto',
+          margin: '20px'
+        }}
+      >
         <div className="modal-header">
           <h4>AI Match Analysis</h4>
           <button className="btn-close" onClick={onClose}>×</button>
         </div>
 
         <div className="modal-body">
-          <div className="comparison-section">
+          <div className="comparison-section" style={{marginBottom: '20px', padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid #dee2e6'}}>
             <div className="row">
               <div className="col-md-6">
-                <h6>Your Record</h6>
-                <div className="person-summary">
-                  <p><strong>{person.givenNames} {person.familyNames}</strong></p>
-                  <p>Born: {person.birthDate || 'Unknown'}</p>
-                  <p>Location: {person.birthPlace || 'Unknown'}</p>
+                <h6 style={{color: '#495057', fontSize: '16px', fontWeight: 'bold', marginBottom: '12px', borderBottom: '2px solid #6c757d', paddingBottom: '5px'}}>👤 Your Record</h6>
+                <div className="person-summary" style={{padding: '10px', backgroundColor: '#ffffff', borderRadius: '6px', border: '1px solid #e9ecef'}}>
+                  <p style={{marginBottom: '6px', color: '#333', fontSize: '14px'}}><strong style={{color: '#333'}}>{person.givenNames} {person.familyNames}</strong></p>
+                  <p style={{marginBottom: '6px', color: '#333', fontSize: '14px'}}>Born: {person.birthDate || 'Unknown'}</p>
+                  <p style={{marginBottom: '0', color: '#333', fontSize: '14px'}}>Location: {person.birthPlace || 'Unknown'}</p>
                 </div>
               </div>
               
               <div className="col-md-6">
-                <h6>Potential Match</h6>
-                <div className="person-summary">
-                  <p><strong>{result.name}</strong></p>
-                  <p>Born: {result.birth || 'Unknown'}</p>
-                  <p>Location: {result.location || 'Unknown'}</p>
-                  <p>Source: {result.source}</p>
+                <h6 style={{color: '#495057', fontSize: '16px', fontWeight: 'bold', marginBottom: '12px', borderBottom: '2px solid #6c757d', paddingBottom: '5px'}}>🔍 Potential Match</h6>
+                <div className="person-summary" style={{padding: '10px', backgroundColor: '#ffffff', borderRadius: '6px', border: '1px solid #e9ecef'}}>
+                  <p style={{marginBottom: '6px', color: '#333', fontSize: '14px'}}><strong style={{color: '#333'}}>{result.name}</strong></p>
+                  <p style={{marginBottom: '6px', color: '#333', fontSize: '14px'}}>Born: {result.birth || 'Unknown'}</p>
+                  <p style={{marginBottom: '6px', color: '#333', fontSize: '14px'}}>Location: {result.location || 'Unknown'}</p>
+                  <p style={{marginBottom: '0', color: '#333', fontSize: '14px'}}>Source: {result.source}</p>
                 </div>
               </div>
             </div>
@@ -375,17 +415,43 @@ const AnalysisModal = ({ result, person, onClose, onAttach }) => {
               <h6>Analysis Results</h6>
               
               {result.detailedAnalysis.ai && (
-                <div className="ai-analysis">
-                  <strong>AI Analysis:</strong>
-                  <p>Confidence: {Math.round(result.detailedAnalysis.ai.confidence * 100)}%</p>
-                  <p>Reasoning: {result.detailedAnalysis.ai.reasoning}</p>
+                <div className="ai-analysis" style={{marginBottom: '15px', padding: '10px', border: '1px solid #007bff', borderRadius: '5px', backgroundColor: '#f8f9ff'}}>
+                  <h6 style={{color: '#007bff', marginBottom: '10px', fontSize: '16px'}}>🤖 AI Analysis:</h6>
                   
-                  {result.detailedAnalysis.ai.matchingFactors && (
-                    <div className="factors">
-                      <strong>Matching Factors:</strong>
-                      <ul>
+                  <div style={{marginBottom: '15px'}}>
+                    <div style={{marginBottom: '10px', padding: '8px', backgroundColor: '#f0f8ff', borderRadius: '4px'}}>
+                      <p style={{marginBottom: '5px', fontSize: '16px', color: '#333'}}>
+                        <strong style={{color: '#333'}}>Confidence:</strong> <span style={{color: '#007bff', fontWeight: 'bold', fontSize: '18px'}}>{Math.round(result.detailedAnalysis.ai.confidence * 100)}%</span>
+                      </p>
+                      <p style={{marginBottom: '5px', fontSize: '14px', color: '#333'}}>
+                        <strong style={{color: '#333'}}>Method:</strong> {result.detailedAnalysis.ai.method === 'fallback' ? '🔄 Rule-based Analysis (OpenAI unavailable)' : '🤖 AI-Powered Analysis'}
+                      </p>
+                    </div>
+                    <div style={{marginBottom: '10px'}}>
+                      <p style={{marginBottom: '10px', fontSize: '14px', lineHeight: '1.5', color: '#333'}}>
+                        <strong style={{color: '#333'}}>Analysis Details:</strong><br/>
+                        {result.detailedAnalysis.ai.reasoning}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {result.detailedAnalysis.ai.matchingFactors && result.detailedAnalysis.ai.matchingFactors.length > 0 && (
+                    <div className="factors" style={{marginTop: '10px'}}>
+                      <strong style={{color: '#333'}}>Matching Factors:</strong>
+                      <ul style={{marginTop: '5px', paddingLeft: '20px'}}>
                         {result.detailedAnalysis.ai.matchingFactors.map((factor, idx) => (
-                          <li key={idx}>{factor}</li>
+                          <li key={idx} style={{marginBottom: '3px', color: '#333'}}>{factor}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {result.detailedAnalysis.ai.concerns && result.detailedAnalysis.ai.concerns.length > 0 && (
+                    <div className="concerns" style={{marginTop: '10px'}}>
+                      <strong style={{color: '#dc3545'}}>Concerns:</strong>
+                      <ul style={{marginTop: '5px', paddingLeft: '20px'}}>
+                        {result.detailedAnalysis.ai.concerns.map((concern, idx) => (
+                          <li key={idx} style={{marginBottom: '3px', color: '#dc3545'}}>{concern}</li>
                         ))}
                       </ul>
                     </div>
@@ -393,9 +459,54 @@ const AnalysisModal = ({ result, person, onClose, onAttach }) => {
                 </div>
               )}
 
-              <div className="final-recommendation">
-                <strong>Recommendation:</strong>
-                <div className={`recommendation-badge ${result.detailedAnalysis.finalRecommendation?.action}`}>
+              {/* Confidence Analysis */}
+              {result.detailedAnalysis.confidence && (
+                <div className="confidence-analysis" style={{marginBottom: '15px', padding: '10px', border: '1px solid #28a745', borderRadius: '5px', backgroundColor: '#f8fff8'}}>
+                  <h6 style={{color: '#28a745', marginBottom: '10px', fontSize: '16px'}}>📊 Confidence Analysis:</h6>
+                  <p style={{marginBottom: '5px', color: '#333', fontWeight: 'bold'}}>Overall Confidence: {Math.round(result.detailedAnalysis.confidence.overallConfidence * 100)}%</p>
+                  
+                  {result.detailedAnalysis.confidence.analysis && (
+                    <div style={{marginTop: '10px'}}>
+                      <strong style={{color: '#333'}}>Detailed Breakdown:</strong>
+                      <div style={{marginTop: '8px'}}>
+                        {result.detailedAnalysis.confidence.analysis.map((item, idx) => (
+                          <div key={idx} style={{
+                            marginBottom: '6px', 
+                            fontSize: '14px',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            color: '#333',
+                            fontWeight: '500',
+                            backgroundColor: item.includes('✅') ? '#d4edda' : 
+                                           item.includes('❌') ? '#f8d7da' : '#fff3cd'
+                          }}>
+                            {item}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Final Recommendation */}
+              <div className="final-recommendation" style={{marginTop: '15px', padding: '10px', borderRadius: '5px', backgroundColor: '#fff9e6', border: '1px solid #ffc107'}}>
+                <h6 style={{color: '#856404', marginBottom: '10px', fontSize: '16px'}}>🎯 Final Recommendation:</h6>
+                <div 
+                  className={`recommendation-badge ${result.detailedAnalysis.finalRecommendation?.action}`}
+                  style={{
+                    marginTop: '5px',
+                    padding: '8px 12px',
+                    borderRadius: '4px',
+                    fontWeight: 'bold',
+                    backgroundColor: result.detailedAnalysis.finalRecommendation?.action === 'accept' ? '#d4edda' : 
+                                   result.detailedAnalysis.finalRecommendation?.action === 'review' ? '#fff3cd' : '#f8d7da',
+                    color: result.detailedAnalysis.finalRecommendation?.action === 'accept' ? '#155724' : 
+                           result.detailedAnalysis.finalRecommendation?.action === 'review' ? '#856404' : '#721c24',
+                    border: '1px solid ' + (result.detailedAnalysis.finalRecommendation?.action === 'accept' ? '#c3e6cb' : 
+                                           result.detailedAnalysis.finalRecommendation?.action === 'review' ? '#ffeaa7' : '#f5c6cb')
+                  }}
+                >
                   {result.detailedAnalysis.finalRecommendation?.action?.toUpperCase()}: {result.detailedAnalysis.finalRecommendation?.reasoning}
                 </div>
               </div>

@@ -275,6 +275,10 @@ router.post('/analyze-match', authMiddleware, async (req, res) => {
     };
 
     console.log(`✅ AI analysis complete: ${aiAnalysis.confidence || confidenceAnalysis.overallConfidence} confidence`);
+    
+    // Debug: log the actual response structure
+    console.log('🔍 Combined Analysis:', JSON.stringify(combinedAnalysis, null, 2));
+    console.log('🔍 AI Analysis:', JSON.stringify(aiAnalysis, null, 2));
 
     res.json({
       success: true,
