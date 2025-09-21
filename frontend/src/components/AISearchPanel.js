@@ -478,7 +478,11 @@ const AnalysisModal = ({ result, person, onClose, onAttach, onReject }) => {
                         <strong style={{color: '#333'}}>Confidence:</strong> <span style={{color: '#007bff', fontWeight: 'bold', fontSize: '18px'}}>{Math.round(result.detailedAnalysis.ai.confidence * 100)}%</span>
                       </p>
                       <p style={{marginBottom: '5px', fontSize: '14px', color: '#333'}}>
-                        <strong style={{color: '#333'}}>Method:</strong> {result.detailedAnalysis.ai.method === 'fallback' ? '🔄 Rule-based Analysis (OpenAI unavailable)' : '🤖 AI-Powered Analysis'}
+                        <strong style={{color: '#333'}}>Method:</strong> {
+                          result.detailedAnalysis.ai.method === 'enhanced_fallback' ? '🧬 Enhanced Analysis (with validation)' :
+                          result.detailedAnalysis.ai.method === 'fallback' ? '🔄 Rule-based Analysis (OpenAI unavailable)' : 
+                          '🤖 AI-Powered Analysis'
+                        }
                       </p>
                     </div>
                     <div style={{marginBottom: '10px'}}>
@@ -508,6 +512,59 @@ const AnalysisModal = ({ result, person, onClose, onAttach, onReject }) => {
                           <li key={idx} style={{marginBottom: '3px', color: '#dc3545'}}>{concern}</li>
                         ))}
                       </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Data Validation Analysis */}
+              {result.detailedAnalysis.ai && result.detailedAnalysis.ai.validation && (
+                <div className="validation-analysis" style={{marginBottom: '15px', padding: '10px', border: '1px solid #17a2b8', borderRadius: '5px', backgroundColor: '#f0fbff'}}>
+                  <h6 style={{color: '#17a2b8', marginBottom: '10px', fontSize: '16px'}}>🧬 Data Validation:</h6>
+                  
+                  <div style={{display: 'flex', gap: '15px', marginBottom: '10px'}}>
+                    <div style={{flex: 1, padding: '8px', backgroundColor: '#e6f7ff', borderRadius: '4px', textAlign: 'center'}}>
+                      <div style={{fontSize: '14px', color: '#666', marginBottom: '3px'}}>Person Validation</div>
+                      <div style={{fontSize: '18px', fontWeight: 'bold', color: result.detailedAnalysis.ai.validation.personValidation.score >= 0.8 ? '#28a745' : result.detailedAnalysis.ai.validation.personValidation.score >= 0.6 ? '#ffc107' : '#dc3545'}}>
+                        {Math.round(result.detailedAnalysis.ai.validation.personValidation.score * 100)}%
+                      </div>
+                    </div>
+                    <div style={{flex: 1, padding: '8px', backgroundColor: '#e6f7ff', borderRadius: '4px', textAlign: 'center'}}>
+                      <div style={{fontSize: '14px', color: '#666', marginBottom: '3px'}}>Match Validation</div>
+                      <div style={{fontSize: '18px', fontWeight: 'bold', color: result.detailedAnalysis.ai.validation.matchValidation.score >= 0.8 ? '#28a745' : result.detailedAnalysis.ai.validation.matchValidation.score >= 0.6 ? '#ffc107' : '#dc3545'}}>
+                        {Math.round(result.detailedAnalysis.ai.validation.matchValidation.score * 100)}%
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {(result.detailedAnalysis.ai.validation.personValidation.issues > 0 || result.detailedAnalysis.ai.validation.matchValidation.issues > 0) && (
+                    <div style={{marginTop: '10px', padding: '8px', backgroundColor: '#fff3cd', borderRadius: '4px', border: '1px solid #ffc107'}}>
+                      <strong style={{color: '#856404', fontSize: '14px'}}>⚠️ Validation Issues Detected:</strong>
+                      <div style={{marginTop: '5px', fontSize: '13px', color: '#856404'}}>
+                        Person record: {result.detailedAnalysis.ai.validation.personValidation.issues} issues, {result.detailedAnalysis.ai.validation.personValidation.warnings} warnings
+                        <br/>
+                        Match record: {result.detailedAnalysis.ai.validation.matchValidation.issues} issues, {result.detailedAnalysis.ai.validation.matchValidation.warnings} warnings
+                      </div>
+                    </div>
+                  )}
+                  
+                  {result.detailedAnalysis.ai.validation.personValidation.quality && (
+                    <div style={{marginTop: '10px'}}>
+                      <strong style={{color: '#333', fontSize: '14px'}}>📊 Data Quality Assessment:</strong>
+                      <div style={{marginTop: '5px', display: 'flex', gap: '10px'}}>
+                        <div style={{flex: 1, fontSize: '13px'}}>
+                          <span style={{color: '#666'}}>Person Quality: </span>
+                          <span style={{color: result.detailedAnalysis.ai.validation.personValidation.quality.score >= 0.7 ? '#28a745' : result.detailedAnalysis.ai.validation.personValidation.quality.score >= 0.4 ? '#ffc107' : '#dc3545', fontWeight: 'bold'}}>
+                            {Math.round((result.detailedAnalysis.ai.validation.personValidation.quality.score || 0) * 100)}%
+                          </span>
+                        </div>
+                        <div style={{flex: 1, fontSize: '13px'}}>
+                          <span style={{color: '#666'}}>Match Quality: </span>
+                          <span style={{color: result.detailedAnalysis.ai.validation.matchValidation.quality.score >= 0.7 ? '#28a745' : result.detailedAnalysis.ai.validation.matchValidation.quality.score >= 0.4 ? '#ffc107' : '#dc3545', fontWeight: 'bold'}}>
+                            {Math.round((result.detailedAnalysis.ai.validation.matchValidation.quality.score || 0) * 100)}%
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
