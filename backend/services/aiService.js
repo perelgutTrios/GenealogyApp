@@ -47,7 +47,7 @@ Return only valid JSON.`;
 
     try {
       const response = await this.openai.chat.completions.create({
-        model: "gpt-4",
+        model: "gpt-3.5-turbo",
         messages: [{ 
           role: "system", 
           content: "You are an expert genealogist specializing in record research and name variations. Always respond with valid JSON only." 
@@ -304,7 +304,7 @@ Consider:
 
     try {
       const response = await this.openai.chat.completions.create({
-        model: "gpt-4",
+        model: "gpt-3.5-turbo",
         messages: [{ 
           role: "system", 
           content: "You are an expert genealogist. Analyze record matches carefully and respond with valid JSON only." 
