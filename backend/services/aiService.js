@@ -1,5 +1,6 @@
 const OpenAI = require('openai');
 const axios = require('axios');
+const { NameMatchingService } = require('./nameMatchingService');
 
 class AIGenealogyService {
   constructor() {
@@ -8,6 +9,9 @@ class AIGenealogyService {
     });
     this.familySearchToken = process.env.FAMILYSEARCH_API_KEY;
     this.ancestryApiKey = process.env.ANCESTRY_API_KEY;
+    
+    // Initialize advanced name matching service
+    this.nameMatchingService = new NameMatchingService();
   }
 
   /**
@@ -103,7 +107,7 @@ Return only valid JSON.`;
   }
 
   /**
-   * Generate name variations using linguistic rules
+   * Generate advanced name variations using the enhanced name matching service
    */
   generateNameVariations(givenNames, familyNames) {
     const variations = new Set();
@@ -111,68 +115,55 @@ Return only valid JSON.`;
     // Original name
     variations.add(`${givenNames} ${familyNames}`);
     
-    // Common nickname patterns
-    if (givenNames) {
-      const nicknames = this.getNicknames(givenNames);
-      nicknames.forEach(nick => variations.add(`${nick} ${familyNames}`));
-    }
+    // Use advanced name matching service for comprehensive variations
+    const person = { givenNames, familyNames };
+    
+    // Generate nickname variations
+    const givenNameVariations = this.nameMatchingService.getNicknameVariations(givenNames || '');
+    const familyNameVariations = this.nameMatchingService.getSpellingVariations(familyNames || '');
+    const culturalVariations = this.nameMatchingService.getCulturalVariations(givenNames || '');
+    
+    // Combine given name variations with family name
+    givenNameVariations.forEach(givenVar => {
+      if (givenVar && familyNames) {
+        variations.add(`${givenVar} ${familyNames}`);
+      }
+    });
+    
+    // Combine original given name with family name variations
+    familyNameVariations.forEach(familyVar => {
+      if (givenNames && familyVar) {
+        variations.add(`${givenNames} ${familyVar}`);
+      }
+    });
+    
+    // Add cultural variations
+    culturalVariations.forEach(culturalVar => {
+      if (culturalVar && familyNames) {
+        variations.add(`${culturalVar} ${familyNames}`);
+      }
+    });
     
     // Initial patterns
     if (givenNames) {
       const firstInitial = givenNames.charAt(0);
       variations.add(`${firstInitial} ${familyNames}`);
       variations.add(`${firstInitial}. ${familyNames}`);
-    }
-    
-    // Common spelling variations
-    if (familyNames) {
-      const spellVariations = this.getSpellingVariations(familyNames);
-      spellVariations.forEach(variant => variations.add(`${givenNames} ${variant}`));
-    }
-    
-    return Array.from(variations);
-  }
-
-  /**
-   * Common nickname mappings
-   */
-  getNicknames(givenName) {
-    const nicknameMap = {
-      'Stephen': ['Steve', 'Steven', 'Stephan'],
-      'William': ['Bill', 'Will', 'Billy', 'Willie'],
-      'Robert': ['Bob', 'Rob', 'Bobby', 'Robbie'],
-      'James': ['Jim', 'Jimmy', 'Jamie'],
-      'Michael': ['Mike', 'Mickey', 'Mick'],
-      'Elizabeth': ['Betty', 'Beth', 'Liz', 'Lizzie', 'Eliza'],
-      'Margaret': ['Maggie', 'Meg', 'Peggy', 'Margie'],
-      'Catherine': ['Kate', 'Katie', 'Cathy', 'Kitty'],
-      // Add more mappings as needed
-    };
-    
-    return nicknameMap[givenName] || [givenName];
-  }
-
-  /**
-   * Generate spelling variations for surnames
-   */
-  getSpellingVariations(surname) {
-    const variations = new Set([surname]);
-    
-    // Common letter substitutions
-    const substitutions = [
-      ['ph', 'f'], ['f', 'ph'], ['c', 'k'], ['k', 'c'],
-      ['ie', 'y'], ['y', 'ie'], ['sen', 'son'], ['son', 'sen'],
-      ['tz', 'ts'], ['ts', 'tz'], ['w', 'v'], ['v', 'w']
-    ];
-    
-    substitutions.forEach(([from, to]) => {
-      if (surname.includes(from)) {
-        variations.add(surname.replace(from, to));
+      
+      // Middle initial patterns if multiple given names
+      const nameParts = givenNames.split(/\s+/);
+      if (nameParts.length > 1) {
+        const initials = nameParts.map(part => part.charAt(0)).join('.');
+        variations.add(`${initials} ${familyNames}`);
+        variations.add(`${nameParts[0]} ${initials.charAt(2)} ${familyNames}`);
       }
-    });
+    }
     
-    return Array.from(variations);
+    console.log(`🎯 Generated ${variations.size} name variations for ${givenNames} ${familyNames}`);
+    return Array.from(variations).filter(v => v.trim().length > 0);
   }
+
+
 
   /**
    * Generate location variations
@@ -355,13 +346,35 @@ Consider:
       console.log('🚨 Mock/test data detected:', mockDataFlags);
     }
     
-    // Name similarity (basic)
-    const nameScore = this.calculateNameSimilarity(
-      `${person.givenNames} ${person.familyNames}`,
-      potentialMatch.name
+    // Advanced name similarity using the enhanced name matching service
+    const nameMatchResult = this.nameMatchingService.matchFullNames(
+      { 
+        givenNames: person.givenNames, 
+        familyNames: person.familyNames,
+        maidenName: person.maidenName 
+      },
+      { 
+        givenNames: this.extractGivenName(potentialMatch.name),
+        familyNames: this.extractFamilyName(potentialMatch.name)
+      },
+      { 
+        usePhoneticMatching: false, // Can be made configurable
+        allowNicknames: true,
+        allowCultural: true,
+        allowSpellingVariations: true
+      }
     );
+    
+    const nameScore = nameMatchResult.overallScore;
     if (!mockDataFlags.length) confidence += nameScore * 0.4; // Only add if not mock data
-    if (nameScore > 0.7) matchingFactors.push('name similarity');
+    
+    // Enhanced matching factors based on detailed analysis
+    if (nameMatchResult.details.givenMatch) matchingFactors.push('given name match');
+    if (nameMatchResult.details.familyMatch) matchingFactors.push('family name match');
+    if (nameMatchResult.maidenNameScore > 0.7) matchingFactors.push('maiden name match');
+    if (nameMatchResult.details.strongMatch) matchingFactors.push('strong name match');
+    
+    console.log(`🎯 Name matching score: ${Math.round(nameScore * 100)}% (Given: ${Math.round(nameMatchResult.givenNameScore * 100)}%, Family: ${Math.round(nameMatchResult.familyNameScore * 100)}%)`);
     
     // Birth date proximity and age validation
     if (person.birthDate && potentialMatch.birth) {
@@ -658,6 +671,37 @@ Consider:
     }
     
     return 0;
+  }
+
+  /**
+   * Extract given name from full name string
+   */
+  extractGivenName(fullName) {
+    if (!fullName) return '';
+    
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length === 0) return '';
+    
+    // For names like "John Smith" or "Mary Jane Smith", assume all but last is given name
+    if (parts.length > 1) {
+      return parts.slice(0, -1).join(' ');
+    }
+    
+    // Single name - could be given or family name, default to given
+    return parts[0];
+  }
+
+  /**
+   * Extract family name from full name string  
+   */
+  extractFamilyName(fullName) {
+    if (!fullName) return '';
+    
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length === 0) return '';
+    
+    // Assume last part is family name
+    return parts[parts.length - 1];
   }
 }
 
