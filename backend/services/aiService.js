@@ -284,14 +284,17 @@ POTENTIAL MATCH:
 - Name: ${potentialMatch.name}
 - Birth: ${potentialMatch.birth}
 - Location: ${potentialMatch.location}
+- Source: ${potentialMatch.source}
 - Additional Info: ${potentialMatch.additionalInfo || 'None'}
+
+CRITICAL: First check if this is mock/test data that should be rejected outright.
 
 Provide analysis as JSON:
 {
   "confidence": 0.85,
-  "reasoning": "Detailed explanation of match factors",
+  "reasoning": "Detailed explanation of match factors and data quality assessment",
   "matchingFactors": ["name similarity", "birth date match", "location match"],
-  "concerns": ["any conflicting information"],
+  "concerns": ["any conflicting information", "mock/test data flags"],
   "recommendation": "accept|review|reject"
 }
 
@@ -300,7 +303,10 @@ Consider:
 - Historical location changes
 - Date recording variations
 - Family context clues
-- Record reliability by source type`;
+- Record reliability by source type
+- MOCK/TEST DATA DETECTION: Flag records with "Mock", "Test", "Example", "Sample", "Demo" locations/names
+- Generic placeholders like "Mock Cemetery", "Test City", "Example County"
+- Obviously fake data patterns that could mislead genealogical research`;
 
     try {
       const response = await this.openai.chat.completions.create({
@@ -341,39 +347,226 @@ Consider:
     const matchingFactors = [];
     const concerns = [];
     
+    // CRITICAL: Check for mock/test/placeholder data first
+    const mockDataFlags = this.detectMockData(potentialMatch);
+    if (mockDataFlags.length > 0) {
+      concerns.push(...mockDataFlags);
+      confidence = Math.max(confidence * 0.1, 0.05); // Severely reduce confidence for mock data
+      console.log('🚨 Mock/test data detected:', mockDataFlags);
+    }
+    
     // Name similarity (basic)
     const nameScore = this.calculateNameSimilarity(
       `${person.givenNames} ${person.familyNames}`,
       potentialMatch.name
     );
-    confidence += nameScore * 0.4;
+    if (!mockDataFlags.length) confidence += nameScore * 0.4; // Only add if not mock data
     if (nameScore > 0.7) matchingFactors.push('name similarity');
     
-    // Birth date proximity  
+    // Birth date proximity and age validation
     if (person.birthDate && potentialMatch.birth) {
       const dateScore = this.calculateDateSimilarity(person.birthDate, potentialMatch.birth);
-      confidence += dateScore * 0.3;
-      if (dateScore > 0.8) matchingFactors.push('birth date match');
+      const ageValidation = this.validateAge(person.birthDate, potentialMatch.death || potentialMatch.recordDate || new Date().getFullYear());
+      
+      if (!ageValidation.isValid) {
+        concerns.push(`🚨 IMPOSSIBLE AGE: ${ageValidation.reason}`);
+        confidence = Math.max(confidence * 0.1, 0.05); // Severely reduce confidence for impossible ages
+      } else {
+        if (!mockDataFlags.length) confidence += dateScore * 0.3; // Only add if not mock data
+        if (dateScore > 0.8) matchingFactors.push('birth date match');
+        if (ageValidation.isReasonable) matchingFactors.push('reasonable lifespan');
+      }
     }
     
     // Location match
     if (person.birthPlace && potentialMatch.location) {
       const locationScore = this.calculateLocationSimilarity(person.birthPlace, potentialMatch.location);
-      confidence += locationScore * 0.3;
+      if (!mockDataFlags.length) confidence += locationScore * 0.3; // Only add if not mock data
       if (locationScore > 0.7) matchingFactors.push('location match');
     }
     
-    const recommendation = confidence > 0.8 ? 'accept' : confidence > 0.6 ? 'review' : 'reject';
+    // Determine recommendation with mock data consideration
+    let recommendation;
+    if (mockDataFlags.length > 0) {
+      recommendation = 'reject';
+    } else {
+      recommendation = confidence > 0.8 ? 'accept' : confidence > 0.6 ? 'review' : 'reject';
+    }
+    
+    // Enhanced reasoning with mock data detection
+    let reasoning = `Rule-based analysis using name (${Math.round(nameScore * 100)}%), date, and location matching`;
+    if (mockDataFlags.length > 0) {
+      reasoning += ` - FLAGGED: Contains mock/test data patterns`;
+    }
     
     return {
       confidence: Math.min(confidence, 1.0),
-      reasoning: `Rule-based analysis using name (${Math.round(nameScore * 100)}%), date, and location matching`,
+      reasoning,
       matchingFactors,
-      concerns: confidence < 0.6 ? ['Low overall match confidence'] : [],
+      concerns: concerns.length > 0 ? concerns : (confidence < 0.6 ? ['Low overall match confidence'] : []),
       recommendation,
       analyzedAt: new Date(),
       method: 'fallback'
     };
+  }
+
+  /**
+   * Detect mock, test, or placeholder data in genealogical records
+   */
+  detectMockData(record) {
+    const flags = [];
+    const mockPatterns = [
+      // Common test/mock indicators
+      /mock/i, /test/i, /example/i, /sample/i, /demo/i, /placeholder/i,
+      /fake/i, /dummy/i, /temp/i, /temporary/i,
+      
+      // Generic/template patterns
+      /^(first|last)\s+(name|surname)$/i,
+      /^(john|jane)\s+(doe|smith)$/i,
+      /^(unknown|n\/a|tbd|tba)$/i,
+      
+      // Date patterns that suggest test data
+      /^(01\/01\/|12\/31\/|1900|2000|9999)/,
+      
+      // Location patterns
+      /^(mock|test|example|sample|demo|fake|dummy)\s+(city|town|county|state|country|cemetery|location)/i,
+      /^(anytown|somewhere|nowhere|unknown\s+location)/i
+    ];
+    
+    // Check all record fields for mock patterns
+    const fieldsToCheck = [
+      record.name,
+      record.location,
+      record.birth,
+      record.death,
+      record.source,
+      record.description
+    ];
+    
+    fieldsToCheck.forEach((field, index) => {
+      if (!field) return;
+      
+      const fieldStr = field.toString();
+      mockPatterns.forEach(pattern => {
+        if (pattern.test(fieldStr)) {
+          const fieldNames = ['name', 'location', 'birth date', 'death date', 'source', 'description'];
+          flags.push(`🚨 MOCK/TEST DATA: ${fieldNames[index]} contains "${fieldStr}"`);
+        }
+      });
+    });
+    
+    // Specific checks for genealogy record quality
+    if (record.source && /findagrave/i.test(record.source) && /mock.*cemetery/i.test(record.location)) {
+      flags.push('🚨 MOCK/TEST DATA: FindAGrave record with mock cemetery location');
+    }
+    
+    if (record.location && record.location.includes('Mock City')) {
+      flags.push('🚨 MOCK/TEST DATA: Contains "Mock City" - clearly test data');
+    }
+    
+    return flags;
+  }
+
+  /**
+   * Validate age calculations for genealogical records
+   */
+  validateAge(birthDate, endDate) {
+    try {
+      const birth = this.parseDate(birthDate);
+      const end = this.parseDate(endDate);
+      
+      if (!birth || !end) {
+        return { isValid: true, isReasonable: true, reason: 'Unable to calculate age - insufficient date data' };
+      }
+
+      const ageYears = end.getFullYear() - birth.getFullYear();
+      
+      // Account for month/day differences for more accurate age
+      let adjustedAge = ageYears;
+      if (end.getMonth() < birth.getMonth() || 
+          (end.getMonth() === birth.getMonth() && end.getDate() < birth.getDate())) {
+        adjustedAge--;
+      }
+
+      // Age validation rules for genealogy
+      if (adjustedAge < 0) {
+        return { 
+          isValid: false, 
+          isReasonable: false, 
+          reason: `Birth date (${birthDate}) is after record date (${endDate})`,
+          calculatedAge: adjustedAge
+        };
+      }
+
+      if (adjustedAge > 122) { // Oldest verified human was 122 years
+        return { 
+          isValid: false, 
+          isReasonable: false, 
+          reason: `Calculated age of ${adjustedAge} years exceeds maximum human lifespan (birth: ${birthDate}, record: ${endDate})`,
+          calculatedAge: adjustedAge
+        };
+      }
+
+      if (adjustedAge > 110) {
+        return { 
+          isValid: true, 
+          isReasonable: false, 
+          reason: `Age of ${adjustedAge} years is extremely rare but possible`,
+          calculatedAge: adjustedAge
+        };
+      }
+
+      return { 
+        isValid: true, 
+        isReasonable: true, 
+        reason: `Reasonable age of ${adjustedAge} years`,
+        calculatedAge: adjustedAge
+      };
+
+    } catch (error) {
+      return { isValid: true, isReasonable: true, reason: 'Error calculating age', error: error.message };
+    }
+  }
+
+  /**
+   * Parse various date formats commonly found in genealogical records
+   */
+  parseDate(dateStr) {
+    if (!dateStr) return null;
+    
+    // Convert to string and clean up
+    const cleaned = dateStr.toString().trim();
+    
+    // Handle year-only dates
+    if (/^\d{4}$/.test(cleaned)) {
+      return new Date(parseInt(cleaned), 0, 1);
+    }
+    
+    // Handle various date formats
+    const patterns = [
+      /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/,  // MM/DD/YYYY
+      /^(\d{4})-(\d{1,2})-(\d{1,2})$/,   // YYYY-MM-DD
+      /^(\d{1,2})\s+(\w+)\s+(\d{4})$/,   // DD MON YYYY
+    ];
+    
+    for (const pattern of patterns) {
+      const match = cleaned.match(pattern);
+      if (match) {
+        if (pattern === patterns[0]) { // MM/DD/YYYY
+          return new Date(parseInt(match[3]), parseInt(match[1]) - 1, parseInt(match[2]));
+        } else if (pattern === patterns[1]) { // YYYY-MM-DD
+          return new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]));
+        }
+      }
+    }
+    
+    // Fallback to Date parsing
+    try {
+      const parsed = new Date(cleaned);
+      return isNaN(parsed.getTime()) ? null : parsed;
+    } catch {
+      return null;
+    }
   }
 
   /**

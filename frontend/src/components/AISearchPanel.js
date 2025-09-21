@@ -56,7 +56,20 @@ const AISearchPanel = ({ person, onResultsFound }) => {
       
       if (response.success) {
         setSearchResults(response.scoredResults);
-        console.log('✅ External search complete:', response.scoredResults.length, 'results');
+        
+        // Show feedback about filtered results
+        let message = `✅ External search complete: ${response.scoredResults.length} results`;
+        if (response.rejectedCount > 0) {
+          message += ` (${response.rejectedCount} previously rejected records filtered out)`;
+        }
+        console.log(message);
+        
+        // Show user-friendly message about rejections
+        if (response.rejectedCount > 0) {
+          setTimeout(() => {
+            alert(`Found ${response.totalResults} total records. ${response.rejectedCount} previously rejected records were filtered out, showing ${response.scoredResults.length} new results.`);
+          }, 500);
+        }
         
         if (onResultsFound) {
           onResultsFound(response.scoredResults);
@@ -92,6 +105,36 @@ const AISearchPanel = ({ person, onResultsFound }) => {
     } catch (err) {
       console.error('❌ Error attaching record:', err);
       setError('Failed to attach record: ' + err.message);
+    }
+  };
+
+  /**
+   * Reject a record match and remember the rejection
+   */
+  const rejectMatch = async (result, reason = null) => {
+    try {
+      console.log('❌ Rejecting record:', result.id, 'for person:', person.id);
+      
+      // Prompt for rejection reason
+      const userReason = reason || prompt('Why are you rejecting this match? (Optional)', 
+        'Age impossible / Wrong person / Poor quality / Other');
+      
+      await aiResearchService.rejectMatch(person.id, result.id, userReason);
+      
+      // Remove from current results
+      setSearchResults(prev => prev.filter(r => r.id !== result.id));
+      
+      // Close analysis modal if it's open for this record
+      if (selectedResult && selectedResult.id === result.id) {
+        setShowAnalysis(false);
+        setSelectedResult(null);
+      }
+      
+      alert(`Record "${result.name}" has been rejected and will not be shown again.`);
+      
+    } catch (err) {
+      console.error('❌ Error rejecting record:', err);
+      setError('Failed to reject record: ' + err.message);
     }
   };
 
@@ -250,6 +293,7 @@ const AISearchPanel = ({ person, onResultsFound }) => {
                 index={index}
                 onAnalyze={() => analyzeMatch(result)}
                 onAttach={() => attachRecord(result)}
+                onReject={(result) => rejectMatch(result)}
               />
             ))}
           </div>
@@ -263,6 +307,7 @@ const AISearchPanel = ({ person, onResultsFound }) => {
           person={person}
           onClose={() => setShowAnalysis(false)}
           onAttach={() => attachRecord(selectedResult)}
+          onReject={(result, reason) => rejectMatch(result, reason)}
         />
       )}
     </div>
@@ -272,7 +317,7 @@ const AISearchPanel = ({ person, onResultsFound }) => {
 /**
  * Individual search result card component
  */
-const SearchResultCard = ({ result, index, onAnalyze, onAttach }) => {
+const SearchResultCard = ({ result, index, onAnalyze, onAttach, onReject }) => {
   const getConfidenceColor = (confidence) => {
     if (confidence >= 0.8) return 'success';
     if (confidence >= 0.6) return 'warning';
@@ -343,6 +388,15 @@ const SearchResultCard = ({ result, index, onAnalyze, onAttach }) => {
           <i className="bi bi-link-45deg"></i>
           {result.confidence >= 0.8 ? 'Auto-Attach' : 'Review & Attach'}
         </button>
+        
+        <button 
+          className="btn btn-sm btn-outline-danger"
+          onClick={() => onReject(result)}
+          title="Reject this match permanently"
+        >
+          <i className="bi bi-x-circle"></i>
+          Reject
+        </button>
 
         {result.url && (
           <a 
@@ -363,7 +417,7 @@ const SearchResultCard = ({ result, index, onAnalyze, onAttach }) => {
 /**
  * Analysis modal for detailed record examination
  */
-const AnalysisModal = ({ result, person, onClose, onAttach }) => {
+const AnalysisModal = ({ result, person, onClose, onAttach, onReject }) => {
   return (
     <div className="analysis-modal-overlay" onClick={onClose} style={{position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1050}}>
       <div 
@@ -518,6 +572,21 @@ const AnalysisModal = ({ result, person, onClose, onAttach }) => {
           <button className="btn btn-secondary" onClick={onClose}>
             Close
           </button>
+          
+          <button 
+            className="btn btn-danger" 
+            onClick={() => {
+              const reason = result.detailedAnalysis?.ai?.concerns?.join(', ') || 
+                           result.detailedAnalysis?.confidence?.concerns?.join(', ') || 
+                           null;
+              onReject(result, reason);
+            }}
+            title="Reject this match permanently"
+          >
+            <i className="bi bi-x-circle"></i>
+            Reject Match
+          </button>
+          
           <button 
             className="btn btn-success" 
             onClick={onAttach}

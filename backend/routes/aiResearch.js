@@ -171,9 +171,33 @@ router.post('/search-external', authMiddleware, async (req, res) => {
     // Search external sources
     const externalResults = await externalSearchService.searchAllSources(searchQueries, enrichedPerson);
 
+    // Filter out previously rejected matches
+    const rejectedHashes = new Set();
+    if (user.rejectedMatches && user.rejectedMatches.length > 0) {
+      user.rejectedMatches.forEach(rejection => {
+        // Create hash for this person-record combination
+        rejectedHashes.add(`${rejection.recordId}_${personId}`);
+        // Also check the stored recordHash for backward compatibility
+        if (rejection.recordHash) {
+          rejectedHashes.add(rejection.recordHash);
+        }
+      });
+    }
+
+    const filteredResults = externalResults.filter(result => {
+      const recordHash = `${result.id}_${personId}`;
+      const isRejected = rejectedHashes.has(recordHash);
+      if (isRejected) {
+        console.log(`🚫 Filtering out previously rejected record: ${result.id} for person ${personId}`);
+      }
+      return !isRejected;
+    });
+
+    console.log(`🔍 External search: ${externalResults.length} raw results, ${filteredResults.length} after filtering rejections`);
+
     // Calculate confidence scores for each result
     const scoredResults = await Promise.all(
-      externalResults.map(async (result) => {
+      filteredResults.map(async (result) => {
         const confidenceAnalysis = confidenceScorer.calculateConfidence(
           enrichedPerson, 
           result, 
@@ -201,6 +225,8 @@ router.post('/search-external', authMiddleware, async (req, res) => {
       personId: personId,
       personName: `${person.givenNames} ${person.familyNames}`,
       totalResults: externalResults.length,
+      filteredResults: filteredResults.length,
+      rejectedCount: externalResults.length - filteredResults.length,
       scoredResults: topResults,
       searchedAt: new Date(),
       sources: [...new Set(externalResults.map(r => r.source))] // Unique sources searched
@@ -568,6 +594,68 @@ function isLikelyNeverMarried(person) {
   // If person died very young, might not have married
   return age < 16 || (person.deathDate && extractYear(person.deathDate) - birthYear < 16);
 }
+
+/**
+ * Reject a record match and remember the rejection
+ * POST /api/ai-research/reject-match
+ */
+router.post('/reject-match', authMiddleware, async (req, res) => {
+  try {
+    const { personId, recordId, reason } = req.body;
+    
+    if (!personId || !recordId) {
+      return res.status(400).json({ message: 'Person ID and record ID are required' });
+    }
+
+    console.log(`❌ User rejecting match: person ${personId}, record ${recordId}, reason: ${reason || 'None provided'}`);
+
+    // Get user to store rejection
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Initialize rejectedMatches array if it doesn't exist
+    if (!user.rejectedMatches) {
+      user.rejectedMatches = [];
+    }
+
+    // Add rejection record
+    const rejection = {
+      personId,
+      recordId,
+      reason: reason || 'User rejected',
+      rejectedAt: new Date(),
+      recordHash: `${recordId}_${personId}` // Simple hash to identify this specific match
+    };
+
+    // Remove any existing rejection for this match and add new one
+    user.rejectedMatches = user.rejectedMatches.filter(r => r.recordHash !== rejection.recordHash);
+    user.rejectedMatches.push(rejection);
+
+    // Keep only last 1000 rejections to prevent unbounded growth
+    if (user.rejectedMatches.length > 1000) {
+      user.rejectedMatches = user.rejectedMatches.slice(-1000);
+    }
+
+    await user.save();
+
+    console.log(`✅ Match rejection saved for user ${user._id}`);
+
+    res.json({
+      success: true,
+      message: 'Match rejected successfully',
+      rejectionId: rejection.recordHash
+    });
+
+  } catch (error) {
+    console.error('❌ Error rejecting match:', error);
+    res.status(500).json({ 
+      message: 'Failed to reject match', 
+      error: error.message 
+    });
+  }
+});
 
 function extractYear(dateString) {
   if (!dateString) return null;

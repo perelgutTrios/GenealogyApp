@@ -138,6 +138,18 @@ export const aiResearchService = {
   getResearchSuggestions: async (personId) => {
     const response = await api.get(`/ai-research/suggestions/${personId}`);
     return response.data;
+  },
+
+  /**
+   * Reject a specific record match
+   */
+  rejectMatch: async (personId, recordId, reason) => {
+    const response = await api.post('/ai-research/reject-match', { 
+      personId, 
+      recordId, 
+      reason 
+    });
+    return response.data;
   }
 };
 

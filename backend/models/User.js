@@ -62,7 +62,15 @@ const userSchema = new mongoose.Schema({
   lastLogin: {
     type: Date,
     default: null
-  }
+  },
+  // Store rejected record matches to avoid reshowing them
+  rejectedMatches: [{
+    personId: String,
+    recordId: String, 
+    reason: String,
+    rejectedAt: { type: Date, default: Date.now },
+    recordHash: String // Unique identifier for this person-record combination
+  }]
 }, {
   timestamps: true
 });
