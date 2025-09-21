@@ -16,6 +16,35 @@ const externalSearchService = new ExternalSearchService();
 const confidenceScorer = new ConfidenceScorer();
 
 /**
+ * Debug endpoint to check user authentication and data access
+ * GET /api/ai-research/debug
+ */
+router.get('/debug', authMiddleware, async (req, res) => {
+  try {
+    console.log('🔍 Debug - User ID from token:', req.user?.userId);
+    
+    const user = await User.findById(req.user.userId);
+    console.log('🔍 Debug - User found:', user ? 'Yes' : 'No');
+    
+    if (user) {
+      const gedcomDb = await GedcomDatabase.findOne({ userId: user._id });
+      console.log('🔍 Debug - GEDCOM DB found:', gedcomDb ? 'Yes' : 'No');
+      console.log('🔍 Debug - User has encryption key:', user.encryptionKey ? 'Yes' : 'No');
+    }
+    
+    res.json({
+      success: true,
+      userFound: !!user,
+      gedcomFound: user ? !!(await GedcomDatabase.findOne({ userId: user._id })) : false,
+      hasEncryptionKey: user ? !!user.encryptionKey : false
+    });
+  } catch (error) {
+    console.error('❌ Debug endpoint error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * Generate AI-powered search queries for a person
  * POST /api/ai-research/generate-queries
  */
@@ -28,13 +57,24 @@ router.post('/generate-queries', authMiddleware, async (req, res) => {
     }
 
     console.log(`🤖 Generating AI search queries for person: ${personId}`);
+    console.log(`👤 Authenticated user ID: ${req.user?.userId}`);
 
     // Get user's GEDCOM database
     const user = await User.findById(req.user.userId);
+    if (!user) {
+      console.error('❌ User not found for ID:', req.user.userId);
+      return res.status(404).json({ message: 'User not found. Please log in again.' });
+    }
+
     const gedcomDb = await GedcomDatabase.findOne({ userId: user._id });
-    
-    if (!gedcomDb || !user.encryptionKey) {
-      return res.status(404).json({ message: 'GEDCOM data not found' });
+    if (!gedcomDb) {
+      console.error('❌ GEDCOM database not found for user:', user._id);
+      return res.status(404).json({ message: 'GEDCOM data not found. Please upload a GEDCOM file first.' });
+    }
+
+    if (!user.encryptionKey) {
+      console.error('❌ User encryption key missing for user:', user._id);
+      return res.status(500).json({ message: 'User encryption key not configured' });
     }
 
     // Decrypt and parse GEDCOM data
@@ -74,7 +114,8 @@ router.post('/generate-queries', authMiddleware, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Error generating AI search queries:', error);
+    console.error('❌ Error generating AI search queries:', error.message);
+    console.error('📍 Stack trace:', error.stack);
     res.status(500).json({ 
       message: 'Failed to generate search queries', 
       error: error.message 
