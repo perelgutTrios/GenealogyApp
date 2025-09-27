@@ -1,13 +1,18 @@
 const OpenAI = require('openai');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 const axios = require('axios');
 const { NameMatchingService } = require('./nameMatchingService');
 const { GenealogyValidationService } = require('./genealogyValidationService');
 
 class AIGenealogyService {
   constructor() {
-    this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY
-    });
+    // Initialize providers if keys available
+    this.openai = process.env.OPENAI_API_KEY
+      ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+      : null;
+    this.gemini = process.env.GEMINI_API_KEY
+      ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
+      : null;
     this.familySearchToken = process.env.FAMILYSEARCH_API_KEY;
     this.ancestryApiKey = process.env.ANCESTRY_API_KEY;
     
@@ -16,6 +21,56 @@ class AIGenealogyService {
     
     // Initialize genealogy validation service
     this.validationService = new GenealogyValidationService();
+  }
+
+  /**
+   * Provider-agnostic JSON generation helper
+   * Tries Gemini first (free tier friendly), then OpenAI; returns parsed JSON or throws.
+   */
+  async generateJsonWithAI({ systemPrompt, userPrompt, maxTokens = 1500, temperature = 0.5 }) {
+    const tryParseJson = (text) => {
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        // Attempt to extract JSON from within code fences or surrounding prose
+        const start = text.indexOf('{');
+        const end = text.lastIndexOf('}');
+        if (start !== -1 && end !== -1 && end > start) {
+          const candidate = text.substring(start, end + 1);
+          return JSON.parse(candidate);
+        }
+        throw e;
+      }
+    };
+    // Try Gemini first if configured
+    if (this.gemini) {
+      try {
+        const model = this.gemini.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const prompt = `${systemPrompt}\n\n${userPrompt}\n\nReturn ONLY valid JSON, no prose.`;
+  const result = await model.generateContent(prompt);
+  const text = result.response.text();
+  return tryParseJson(text);
+      } catch (err) {
+        console.warn('⚠️ Gemini call failed, falling back to OpenAI:', err.message);
+      }
+    }
+
+    // Fallback to OpenAI if available
+    if (this.openai) {
+      const response = await this.openai.chat.completions.create({
+        model: 'gpt-3.5-turbo',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature,
+        max_tokens: maxTokens
+      });
+  const content = response.choices?.[0]?.message?.content || '{}';
+  return tryParseJson(content);
+    }
+
+    throw new Error('No AI provider configured. Set GEMINI_API_KEY or OPENAI_API_KEY.');
   }
 
   /**
@@ -54,20 +109,12 @@ Focus on genealogically sound variations. Consider:
 Return only valid JSON.`;
 
     try {
-      const response = await this.openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [{ 
-          role: "system", 
-          content: "You are an expert genealogist specializing in record research and name variations. Always respond with valid JSON only." 
-        }, { 
-          role: "user", 
-          content: prompt 
-        }],
+      const searchStrategies = await this.generateJsonWithAI({
+        systemPrompt: 'You are an expert genealogist specializing in record research and name variations.',
+        userPrompt: prompt,
         temperature: 0.7,
-        max_tokens: 1500
+        maxTokens: 1500
       });
-
-      const searchStrategies = JSON.parse(response.choices[0].message.content);
       console.log('✅ Generated', Object.keys(searchStrategies).length, 'search strategy categories');
       
       return {
@@ -304,20 +351,12 @@ Consider:
 - Obviously fake data patterns that could mislead genealogical research`;
 
     try {
-      const response = await this.openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [{ 
-          role: "system", 
-          content: "You are an expert genealogist. Analyze record matches carefully and respond with valid JSON only." 
-        }, { 
-          role: "user", 
-          content: prompt 
-        }],
-        temperature: 0.3, // Lower temperature for more consistent analysis
-        max_tokens: 800
+      const analysis = await this.generateJsonWithAI({
+        systemPrompt: 'You are an expert genealogist. Analyze record matches carefully and respond with valid JSON only.',
+        userPrompt: prompt,
+        temperature: 0.3,
+        maxTokens: 800
       });
-
-      const analysis = JSON.parse(response.choices[0].message.content);
       console.log('✅ AI match analysis complete:', analysis.confidence);
       
       return {

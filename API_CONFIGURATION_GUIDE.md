@@ -18,7 +18,20 @@ This guide will help you configure all the necessary API keys to unlock the full
 
 ---
 
-## 🧠 **1. OpenAI API (REQUIRED)**
+## 🧠 **1. AI Provider (Choose One: Gemini FREE or OpenAI)**
+
+You can use Google Gemini (free tier available) or OpenAI. If both keys are set, the backend prefers Gemini to help you stay within a free tier during development.
+
+### Option A: Google Gemini (Recommended Free Tier)
+1. Go to https://ai.google.dev/ and open AI Studio
+2. Create an API key
+3. Add to your backend `.env`:
+
+```env
+GEMINI_API_KEY=your_gemini_key_here
+```
+
+### Option B: OpenAI
 
 **Purpose**: Powers GPT-4 for intelligent search query generation and record analysis
 
@@ -33,6 +46,7 @@ This guide will help you configure all the necessary API keys to unlock the full
 
 ### **Configuration:**
 ```env
+GEMINI_API_KEY=your_gemini_key_here
 OPENAI_API_KEY=sk-proj-abc123def456...your_actual_key_here
 ```
 
@@ -174,6 +188,7 @@ Open `backend/.env` and replace the placeholder values:
 
 ```env
 # ESSENTIAL APIs
+GEMINI_API_KEY=your_gemini_key_here
 OPENAI_API_KEY=sk-proj-your_actual_openai_key_here
 FAMILYSEARCH_CLIENT_ID=your_actual_familysearch_client_id
 FAMILYSEARCH_CLIENT_SECRET=your_actual_familysearch_secret

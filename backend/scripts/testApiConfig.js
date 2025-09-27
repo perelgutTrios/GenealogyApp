@@ -69,6 +69,33 @@ async function testOpenAI() {
   }
 }
 
+async function testGemini() {
+  log(colors.blue, '\n🧠 Testing Google Gemini API...');
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    logResult(false, 'Gemini API key not configured');
+    log(colors.yellow, '   ⚠️  Set GEMINI_API_KEY in your .env to use the free tier');
+    return false;
+  }
+  try {
+    // Simple ping using fetch to models endpoint via REST (metadata)
+    const url = 'https://generativelanguage.googleapis.com/v1/models?key=' + apiKey;
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      logResult(true, `Gemini API connection successful`);
+      log(colors.green, `   📊 Available models: ${data.models?.length || 0}`);
+      return true;
+    } else {
+      logResult(false, `Gemini API error: ${res.status} ${res.statusText}`);
+      return false;
+    }
+  } catch (err) {
+    logResult(false, `Gemini API connection failed: ${err.message}`);
+    return false;
+  }
+}
+
 async function testFamilySearch() {
   log(colors.blue, '\n📚 Testing FamilySearch API...');
   
@@ -213,6 +240,7 @@ async function runTests() {
   // Test all configurations
   results['Environment Variables'] = testEnvironmentVariables();
   results['Database Connection'] = testDatabaseConnection();
+  results['Gemini API'] = await testGemini();
   results['OpenAI API'] = await testOpenAI();
   results['FamilySearch API'] = await testFamilySearch();
   
