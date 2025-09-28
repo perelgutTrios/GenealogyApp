@@ -239,6 +239,28 @@ ENCRYPTION_KEY=your-64-character-encryption-key
 PORT=5000
 NODE_ENV=development
 CLIENT_URL=http://localhost:3000
+
+# AI Providers (choose at least one)
+GEMINI_API_KEY=your_gemini_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
+GEMINI_MODEL=gemini-1.5-flash-latest
+GEMINI_ENABLE_WEB_GROUNDING=false  # Set true to allow Gemini (v1beta) to use Google Search grounding
+
+# External APIs (optional but recommended)
+FAMILYSEARCH_CLIENT_ID=your_familysearch_client_id_here
+FAMILYSEARCH_CLIENT_SECRET=your_familysearch_client_secret_here
+WIKITREE_API_KEY=no_key_required
+CHRONICLING_AMERICA_API_BASE=https://chroniclingamerica.loc.gov
+ 
+# Proxy/IP handling
+# TRUST_PROXY can be: true|false|<number_of_hops>|<token>|<token1,token2,...>
+# Defaults to: loopback,linklocal,uniquelocal
+TRUST_PROXY=
+
+# Mock data sources
+# ENABLE_MOCK_SOURCES controls whether any mock external sources are used.
+# Default is false; set to true only for controlled demos.
+ENABLE_MOCK_SOURCES=false
 ```
 
 ## 🏃‍♂️ Getting Started
@@ -254,6 +276,11 @@ CLIENT_URL=http://localhost:3000
    # Edit .env with your configuration
    ```
 
+  - For free-tier AI, set GEMINI_API_KEY in `.env`. If both Gemini and OpenAI keys are set, the server prefers Gemini.
+  - Optional: set GEMINI_MODEL to a supported model (default: `gemini-1.5-flash-latest`). If you see 404/unsupported errors, try `gemini-1.5-flash-8b`.
+  - Optional: set GEMINI_ENABLE_WEB_GROUNDING=true to allow Gemini to use Google Search grounding (v1beta) for better factuality.
+  - See `API_CONFIGURATION_GUIDE.md` for step-by-step provider setup.
+
 3. **Start MongoDB**
    ```bash
    # Make sure MongoDB is running locally
@@ -265,6 +292,12 @@ CLIENT_URL=http://localhost:3000
    npm start
    # Server runs on http://localhost:5000
    ```
+
+5. **Test Configuration (recommended)**
+  ```bash
+  node scripts/testApiConfig.js
+  ```
+  This validates environment variables, MongoDB URI, and AI provider connectivity (Gemini/OpenAI), plus FamilySearch if configured.
 
 ## 🧪 Maintenance Scripts
 

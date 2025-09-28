@@ -5,6 +5,14 @@
  * Run with: node scripts/testApiConfig.js
  */
 
+// Shim deprecated util._extend to Object.assign to silence dependency warnings
+try {
+  const util = require('util');
+  if (util && typeof util._extend === 'function') {
+    util._extend = Object.assign;
+  }
+} catch {}
+
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 

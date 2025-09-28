@@ -1,5 +1,4 @@
 const OpenAI = require('openai');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 const axios = require('axios');
 const { NameMatchingService } = require('./nameMatchingService');
 const { GenealogyValidationService } = require('./genealogyValidationService');
@@ -10,9 +9,9 @@ class AIGenealogyService {
     this.openai = process.env.OPENAI_API_KEY
       ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
       : null;
-    this.gemini = process.env.GEMINI_API_KEY
-      ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
-      : null;
+    this.geminiApiKey = process.env.GEMINI_API_KEY || null;
+    this.geminiModel = process.env.GEMINI_MODEL || 'gemini-1.5-flash-latest';
+  this._geminiResolvedModel = null; // cache a working model id
     this.familySearchToken = process.env.FAMILYSEARCH_API_KEY;
     this.ancestryApiKey = process.env.ANCESTRY_API_KEY;
     
@@ -27,7 +26,7 @@ class AIGenealogyService {
    * Provider-agnostic JSON generation helper
    * Tries Gemini first (free tier friendly), then OpenAI; returns parsed JSON or throws.
    */
-  async generateJsonWithAI({ systemPrompt, userPrompt, maxTokens = 1500, temperature = 0.5 }) {
+  async generateJsonWithAI({ systemPrompt, userPrompt, maxTokens = 1500, temperature = 0.5, jsonSchema = null, enableWebGrounding = undefined }) {
     const tryParseJson = (text) => {
       try {
         return JSON.parse(text);
@@ -42,16 +41,74 @@ class AIGenealogyService {
         throw e;
       }
     };
-    // Try Gemini first if configured
-    if (this.gemini) {
-      try {
-        const model = this.gemini.getGenerativeModel({ model: 'gemini-1.5-flash' });
-        const prompt = `${systemPrompt}\n\n${userPrompt}\n\nReturn ONLY valid JSON, no prose.`;
-  const result = await model.generateContent(prompt);
-  const text = result.response.text();
-  return tryParseJson(text);
-      } catch (err) {
-        console.warn('⚠️ Gemini call failed, falling back to OpenAI:', err.message);
+    // Try Gemini first (prefer v1beta with advanced features)
+    if (this.geminiApiKey) {
+      const prompt = `${userPrompt}\n\nReturn ONLY valid JSON, no prose.`;
+      const bases = [
+        'https://generativelanguage.googleapis.com/v1beta',
+        'https://generativelanguage.googleapis.com/v1'
+      ];
+      const discovered = await this._discoverGeminiModelsSafe();
+      const preferred = [this.geminiModel, 'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro', 'gemini-1.5-flash-latest']
+        .filter(Boolean);
+      const modelsToTry = Array.from(new Set([
+        ...(this._geminiResolvedModel ? [this._geminiResolvedModel] : []),
+        ...preferred,
+        ...discovered
+      ]));
+
+      for (const baseUrl of bases) {
+        for (const modelName of modelsToTry) {
+          try {
+            const url = `${baseUrl}/models/${modelName}:generateContent?key=${this.geminiApiKey}`;
+            const isBeta = baseUrl.endsWith('v1beta');
+            const enableGrounding = enableWebGrounding ?? (process.env.GEMINI_ENABLE_WEB_GROUNDING === 'true');
+            const body = isBeta
+              ? {
+                  // v1beta supports systemInstruction and structured JSON
+                  systemInstruction: { role: 'system', parts: [{ text: systemPrompt }] },
+                  contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                  generationConfig: {
+                    temperature,
+                    maxOutputTokens: Math.min(8192, Math.max(256, maxTokens)),
+                    responseMimeType: 'application/json',
+                    ...(jsonSchema ? { responseSchema: jsonSchema } : {})
+                  },
+                  safetySettings: [
+                    { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+                    { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+                    { category: 'HARM_CATEGORY_SEXUAL_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+                    { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' }
+                  ],
+                  ...(enableGrounding ? { tools: [{ googleSearchRetrieval: {} }] } : {})
+                }
+              : {
+                  // v1 fallback without advanced fields
+                  contents: [
+                    { role: 'user', parts: [{ text: `${systemPrompt}\n\n${prompt}` }] }
+                  ],
+                  generationConfig: {
+                    temperature,
+                    maxOutputTokens: Math.min(8192, Math.max(256, maxTokens))
+                  }
+                };
+            const resp = await axios.post(url, body, { timeout: 20000 });
+
+            const text = resp.data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+            this._geminiResolvedModel = modelName; // cache working model
+            return tryParseJson(text);
+          } catch (err) {
+            const status = err.response?.status;
+            const data = err.response?.data;
+            const msg = data?.error?.message || err.message;
+            console.warn(`⚠️ Gemini (${baseUrl.split('/').pop()}/${modelName}) failed [${status || 'ERR'}]: ${msg}`);
+            // Try next model on 400/404 (unsupported/not found)
+            if (status === 404 || status === 400) continue;
+            // For auth/quota issues, stop trying Gemini and fall back to OpenAI
+            if ([401, 403, 429].includes(status)) break;
+            // Otherwise, try next model
+          }
+        }
       }
     }
 
@@ -66,11 +123,47 @@ class AIGenealogyService {
         temperature,
         max_tokens: maxTokens
       });
-  const content = response.choices?.[0]?.message?.content || '{}';
-  return tryParseJson(content);
+      const content = response.choices?.[0]?.message?.content || '{}';
+      return tryParseJson(content);
     }
 
     throw new Error('No AI provider configured. Set GEMINI_API_KEY or OPENAI_API_KEY.');
+  }
+
+  // Discover available Gemini models that support generateContent
+  async _discoverGeminiModelsSafe() {
+    try {
+      const models = await this._listGeminiModels();
+      const usable = models
+        .filter(m => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+        .map(m => m.name?.replace(/^models\//, ''));
+      if (usable.length) {
+        console.log(`🔎 Gemini models detected: ${usable.slice(0, 5).join(', ')}${usable.length > 5 ? '…' : ''}`);
+      } else {
+        console.warn('⚠️ No usable Gemini models with generateContent found via list API');
+      }
+      return usable;
+    } catch (e) {
+      console.warn('⚠️ Gemini model discovery failed:', e.message);
+      return [];
+    }
+  }
+
+  async _listGeminiModels() {
+    const urls = [
+      `https://generativelanguage.googleapis.com/v1/models?key=${this.geminiApiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${this.geminiApiKey}`
+    ];
+    for (const url of urls) {
+      try {
+        const res = await axios.get(url, { timeout: 10000 });
+        const list = res.data?.models || [];
+        if (list.length) return list;
+      } catch (e) {
+        // try next
+      }
+    }
+    return [];
   }
 
   /**
@@ -115,8 +208,18 @@ Return only valid JSON.`;
         temperature: 0.7,
         maxTokens: 1500
       });
-      console.log('✅ Generated', Object.keys(searchStrategies).length, 'search strategy categories');
-      
+      const valid = searchStrategies &&
+        Array.isArray(searchStrategies.nameVariations) && searchStrategies.nameVariations.length > 0 &&
+        Array.isArray(searchStrategies.locationVariations) &&
+        Array.isArray(searchStrategies.timeRangeQueries) &&
+        Array.isArray(searchStrategies.contextualSearches) &&
+        Array.isArray(searchStrategies.recordTypeTargets);
+      console.log('✅ Generated', Object.keys(searchStrategies || {}).length, 'search strategy categories');
+
+      if (!valid) {
+        console.warn('⚠️ AI returned missing/empty strategy fields; using fallback rule-based generation');
+        return this.generateFallbackQueries(person);
+      }
       return {
         ...searchStrategies,
         generatedAt: new Date(),
@@ -357,8 +460,17 @@ Consider:
         temperature: 0.3,
         maxTokens: 800
       });
-      console.log('✅ AI match analysis complete:', analysis.confidence);
-      
+      const valid = analysis && typeof analysis.confidence === 'number' &&
+        typeof analysis.reasoning === 'string' &&
+        Array.isArray(analysis.matchingFactors) &&
+        Array.isArray(analysis.concerns) &&
+        typeof analysis.recommendation === 'string';
+      console.log('✅ AI match analysis complete:', analysis?.confidence);
+
+      if (!valid) {
+        console.warn('⚠️ AI returned incomplete match analysis; using enhanced fallback');
+        return this.fallbackMatchAnalysis(person, potentialMatch);
+      }
       return {
         ...analysis,
         analyzedAt: new Date(),

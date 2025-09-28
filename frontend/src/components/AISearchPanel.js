@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { aiResearchService } from '../services/api';
 
 const AISearchPanel = ({ person, onResultsFound }) => {
@@ -6,9 +6,62 @@ const AISearchPanel = ({ person, onResultsFound }) => {
   const [isSearching, setIsSearching] = useState(false);
   const [searchQueries, setSearchQueries] = useState(null);
   const [searchResults, setSearchResults] = useState([]);
+  const [searchSummary, setSearchSummary] = useState(null); // { text, type }
+  const [hasSearchedOnce, setHasSearchedOnce] = useState(false);
   const [error, setError] = useState('');
   const [selectedResult, setSelectedResult] = useState(null);
   const [showAnalysis, setShowAnalysis] = useState(false);
+  const [showSearchModal, setShowSearchModal] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [searchTextError, setSearchTextError] = useState('');
+  const [searchBaseline, setSearchBaseline] = useState('');
+  // Breadth controls (synced with JSON in the modal)
+  const [breadthOptions, setBreadthOptions] = useState({
+    maxNameVariations: 12,
+    maxLocationVariations: 3,
+    maxRequests: 30,
+    delayMs: 300,
+  });
+  const [sourceOptions, setSourceOptions] = useState({
+    familySearch: true,
+    chroniclingAmerica: true,
+    wikitree: true,
+    findAGrave: false,
+    newspapers: false,
+    enableMocks: false,
+  });
+  const [timeRangesText, setTimeRangesText] = useState(''); // comma or newline separated ranges like 1890-1900
+  const [parsedSearchObj, setParsedSearchObj] = useState(null);
+  const storageKey = (id) => `aiSearchQueries:${id}`;
+
+  // Load persisted search for this person on mount/person change
+  useEffect(() => {
+    try {
+      if (!person?.id) return;
+      // reset per-person search UI state
+      setSearchResults([]);
+      setSearchSummary(null);
+      setHasSearchedOnce(false);
+      setError('');
+      const raw = localStorage.getItem(storageKey(person.id));
+      if (!raw) {
+        // Clear local state for new person
+        setSearchQueries(null);
+        setSearchBaseline('');
+        return;
+      }
+      const saved = JSON.parse(raw);
+      // saved = { baseline: object|null, edited: object|null }
+      const baselineObj = saved?.baseline || null;
+      const editedObj = saved?.edited || null;
+      const effective = editedObj || baselineObj || null;
+      setSearchQueries(effective);
+      setSearchBaseline(baselineObj ? JSON.stringify(baselineObj, null, 2) : '');
+    } catch (e) {
+      console.warn('Failed to load persisted search:', e);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [person?.id]);
 
   /**
    * Generate AI-powered search queries for the person
@@ -24,7 +77,17 @@ const AISearchPanel = ({ person, onResultsFound }) => {
       
       if (response.success) {
         setSearchQueries(response.searchQueries);
+        // Persist baseline (freshly generated) and clear edited
+        try {
+          if (person?.id) {
+            localStorage.setItem(
+              storageKey(person.id),
+              JSON.stringify({ baseline: response.searchQueries, edited: null })
+            );
+          }
+        } catch {}
         console.log('✅ Search queries generated:', response.searchQueries);
+        return response.searchQueries;
       } else {
         throw new Error(response.message || 'Failed to generate search queries');
       }
@@ -32,17 +95,22 @@ const AISearchPanel = ({ person, onResultsFound }) => {
     } catch (err) {
       console.error('❌ Error generating search queries:', err);
       setError(err.message || 'Failed to generate search queries');
+      return null;
     } finally {
       setIsGeneratingQueries(false);
     }
   };
 
   /**
-   * Search external sources using the generated queries
+   * Search external sources using provided or existing queries
    */
-  const searchExternalSources = async () => {
-    if (!searchQueries) {
-      await generateSearchQueries();
+  const searchExternalSources = async (queriesOverride = null) => {
+    const queries = queriesOverride || searchQueries;
+    if (!queries) {
+      const generated = await generateSearchQueries();
+      if (!generated) return; // failed to generate
+      // Open the editor after generation instead of auto-searching
+      openSearchEditor(generated);
       return;
     }
 
@@ -52,25 +120,24 @@ const AISearchPanel = ({ person, onResultsFound }) => {
 
       console.log('🔍 Searching external sources...');
 
-      const response = await aiResearchService.searchExternal(person.id, searchQueries);
+      const response = await aiResearchService.searchExternal(person.id, queries);
       
       if (response.success) {
         setSearchResults(response.scoredResults);
-        
-        // Show feedback about filtered results
-        let message = `✅ External search complete: ${response.scoredResults.length} results`;
-        if (response.rejectedCount > 0) {
-          message += ` (${response.rejectedCount} previously rejected records filtered out)`;
-        }
-        console.log(message);
-        
-        // Show user-friendly message about rejections
+        setHasSearchedOnce(true);
+
+        // Build a concise summary line always visible, even for 0 results
+        const summary = `External search: ${response.scoredResults.length} results` +
+          (response.rejectedCount > 0 ? ` (${response.rejectedCount} rejected filtered out of ${response.totalResults})` : '');
+        setSearchSummary({ text: summary, type: response.scoredResults.length > 0 ? 'success' : 'warning' });
+
+        // Optional toast-like alert only when filtering happens
         if (response.rejectedCount > 0) {
           setTimeout(() => {
             alert(`Found ${response.totalResults} total records. ${response.rejectedCount} previously rejected records were filtered out, showing ${response.scoredResults.length} new results.`);
           }, 500);
         }
-        
+
         if (onResultsFound) {
           onResultsFound(response.scoredResults);
         }
@@ -84,6 +151,110 @@ const AISearchPanel = ({ person, onResultsFound }) => {
     } finally {
       setIsSearching(false);
     }
+  };
+
+  /**
+   * Open editable search modal with current or generated queries
+   */
+  const openSearchEditor = async (prefill = null) => {
+    try {
+      setSearchTextError('');
+      let queries = prefill || searchQueries;
+      if (!queries) {
+        const generated = await generateSearchQueries();
+        if (!generated) return;
+        queries = generated;
+      }
+      const json = JSON.stringify(queries, null, 2);
+      setSearchText(json);
+      // Only set baseline if we explicitly passed freshly generated queries or no baseline exists
+      if (prefill || !searchBaseline) {
+        setSearchBaseline(json);
+      }
+      // Sync controls from object
+      setParsedSearchObj(queries);
+      const opts = queries?.options || {};
+      setBreadthOptions({
+        maxNameVariations: Number.isFinite(opts.maxNameVariations) ? opts.maxNameVariations : 12,
+        maxLocationVariations: Number.isFinite(opts.maxLocationVariations) ? opts.maxLocationVariations : 3,
+        maxRequests: Number.isFinite(opts.maxRequests) ? opts.maxRequests : 30,
+        delayMs: Number.isFinite(opts.delayMs) ? opts.delayMs : 300,
+      });
+      const srcs = opts.sources || {};
+      setSourceOptions({
+        familySearch: srcs.familySearch !== false,
+        chroniclingAmerica: srcs.chroniclingAmerica !== false,
+        wikitree: srcs.wikitree !== false,
+        findAGrave: !!srcs.findAGrave,
+        newspapers: !!srcs.newspapers,
+        enableMocks: opts.enableMocks === true,
+      });
+      const tr = Array.isArray(queries?.timeRangeQueries) ? queries.timeRangeQueries : [];
+      setTimeRangesText(tr.join(', '));
+      setShowSearchModal(true);
+    } catch (e) {
+      setError('Failed to prepare search editor: ' + (e.message || e));
+    }
+  };
+
+  /**
+   * Confirm and run search with edited JSON
+   */
+  const confirmAndSearch = async () => {
+    try {
+      setSearchTextError('');
+      let parsed;
+      try {
+        parsed = JSON.parse(searchText);
+      } catch (e) {
+        setSearchTextError('Invalid JSON. Please fix formatting or CANCEL.');
+        return;
+      }
+      // keep parsed cache in sync
+      setParsedSearchObj(parsed);
+      setShowSearchModal(false);
+      setSearchQueries(parsed);
+      // Persist edited search
+      try {
+        if (person?.id) {
+          const baselineObj = searchBaseline ? JSON.parse(searchBaseline) : null;
+          localStorage.setItem(
+            storageKey(person.id),
+            JSON.stringify({ baseline: baselineObj, edited: parsed })
+          );
+        }
+      } catch {}
+      await searchExternalSources(parsed);
+    } catch (e) {
+      setError('Search failed: ' + (e.message || e));
+    }
+  };
+
+  // Helper: update JSON text from control states (if JSON can be parsed)
+  const updateSearchTextFromControls = () => {
+    let baseObj = parsedSearchObj;
+    try {
+      baseObj = JSON.parse(searchText);
+    } catch {
+      // if current JSON is invalid, fallback to last parsed object
+    }
+    if (!baseObj || typeof baseObj !== 'object') return;
+    const next = { ...baseObj };
+    next.options = { ...next.options, ...breadthOptions };
+  next.options.sources = { ...next.options?.sources, ...sourceOptions };
+    next.options.enableMocks = !!sourceOptions.enableMocks;
+    const ranges = timeRangesText
+      .split(/[,\n]/)
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+    if (ranges.length > 0) {
+      next.timeRangeQueries = ranges;
+    } else {
+      delete next.timeRangeQueries;
+    }
+    const pretty = JSON.stringify(next, null, 2);
+    setSearchText(pretty);
+    setParsedSearchObj(next);
   };
 
   /**
@@ -196,7 +367,7 @@ const AISearchPanel = ({ person, onResultsFound }) => {
         {!searchQueries ? (
           <button 
             className="btn btn-primary ai-action-btn"
-            onClick={generateSearchQueries}
+            onClick={() => openSearchEditor()}
             disabled={isGeneratingQueries}
           >
             {isGeneratingQueries ? (
@@ -214,7 +385,7 @@ const AISearchPanel = ({ person, onResultsFound }) => {
         ) : (
           <button 
             className="btn btn-success ai-action-btn"
-            onClick={searchExternalSources}
+            onClick={() => openSearchEditor()}
             disabled={isSearching}
           >
             {isSearching ? (
@@ -232,8 +403,8 @@ const AISearchPanel = ({ person, onResultsFound }) => {
         )}
       </div>
 
-      {/* Search Query Preview */}
-      {searchQueries && !isSearching && searchResults.length === 0 && (
+      {/* Search Query Preview (only before first search) */}
+      {searchQueries && !isSearching && !hasSearchedOnce && (
         <div className="search-queries-preview">
           <h5>Generated Search Strategies</h5>
           <div className="query-categories">
@@ -277,6 +448,14 @@ const AISearchPanel = ({ person, onResultsFound }) => {
         </div>
       )}
 
+      {/* Search Summary */}
+      {hasSearchedOnce && searchSummary && (
+        <div className={`alert alert-${searchSummary.type}`}>
+          <i className="bi bi-info-circle me-1"></i>
+          {searchSummary.text}
+        </div>
+      )}
+
       {/* Search Results */}
       {searchResults.length > 0 && (
         <div className="search-results">
@@ -300,6 +479,14 @@ const AISearchPanel = ({ person, onResultsFound }) => {
         </div>
       )}
 
+      {/* Explicit 0-results feedback */}
+      {hasSearchedOnce && !isSearching && searchResults.length === 0 && (
+        <div className="alert alert-warning">
+          <i className="bi bi-exclamation-triangle me-1"></i>
+          0 records found. Try widening time ranges, enabling additional sources (e.g., WikiTree, Chronicling America), or increasing name/location variations.
+        </div>
+      )}
+
       {/* Analysis Modal */}
       {showAnalysis && selectedResult && (
         <AnalysisModal 
@@ -309,6 +496,146 @@ const AISearchPanel = ({ person, onResultsFound }) => {
           onAttach={() => attachRecord(selectedResult)}
           onReject={(result, reason) => rejectMatch(result, reason)}
         />
+      )}
+
+      {/* Search Edit Modal */}
+      {showSearchModal && (
+        <div 
+          className="search-modal-overlay"
+          onClick={() => setShowSearchModal(false)}
+          style={{position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1050}}
+        >
+          <div 
+            className="search-modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{backgroundColor: '#fff', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', width: '90%', maxWidth: 720, maxHeight: '85vh', display: 'flex', flexDirection: 'column'}}
+          >
+            <div className="modal-header" style={{padding: '10px 16px', borderBottom: '1px solid #e9ecef'}}>
+              <h5 className="modal-title" style={{margin: 0}}>Edit Search Query</h5>
+              <button className="btn-close" onClick={() => setShowSearchModal(false)}>×</button>
+            </div>
+            <div className="modal-body" style={{padding: 16, overflow: 'auto', color: '#212529'}}>
+              <p className="text-muted" style={{marginTop: 0}}>You can fine‑tune the AI‑generated search JSON before running the search.</p>
+              {/* Source Selection */}
+              <div className="source-controls" style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12, padding: 12, border: '1px solid #e9ecef', borderRadius: 6, background: '#ffffff', color: '#212529'}}>
+                <div style={{gridColumn: '1 / -1', fontWeight: '600', fontSize: 13}}>Sources</div>
+                <label className="form-check" style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                  <input className="form-check-input" type="checkbox" checked={sourceOptions.familySearch}
+                    onChange={(e) => { setSourceOptions(o => ({...o, familySearch: e.target.checked})); setTimeout(updateSearchTextFromControls, 0); }} />
+                  <span>FamilySearch</span>
+                </label>
+                <label className="form-check" style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                  <input className="form-check-input" type="checkbox" checked={sourceOptions.chroniclingAmerica}
+                    onChange={(e) => { setSourceOptions(o => ({...o, chroniclingAmerica: e.target.checked})); setTimeout(updateSearchTextFromControls, 0); }} />
+                  <span>Chronicling America (LOC)</span>
+                </label>
+                <label className="form-check" style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                  <input className="form-check-input" type="checkbox" checked={sourceOptions.wikitree}
+                    onChange={(e) => { setSourceOptions(o => ({...o, wikitree: e.target.checked})); setTimeout(updateSearchTextFromControls, 0); }} />
+                  <span>WikiTree</span>
+                </label>
+                <label className="form-check" style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                  <input className="form-check-input" type="checkbox" checked={sourceOptions.findAGrave}
+                    onChange={(e) => { setSourceOptions(o => ({...o, findAGrave: e.target.checked})); setTimeout(updateSearchTextFromControls, 0); }} />
+                  <span>FindAGrave (mock)</span>
+                </label>
+                <label className="form-check" style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                  <input className="form-check-input" type="checkbox" checked={sourceOptions.newspapers}
+                    onChange={(e) => { setSourceOptions(o => ({...o, newspapers: e.target.checked})); setTimeout(updateSearchTextFromControls, 0); }} />
+                  <span>Newspaper Archives (mock)</span>
+                </label>
+                <label className="form-check" style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                  <input className="form-check-input" type="checkbox" checked={sourceOptions.enableMocks}
+                    onChange={(e) => { setSourceOptions(o => ({...o, enableMocks: e.target.checked})); setTimeout(updateSearchTextFromControls, 0); }} />
+                  <span>Enable all mock sources by default</span>
+                </label>
+              </div>
+              {/* Breadth Controls */}
+              <div className="breadth-controls" style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12, padding: 12, border: '1px solid #e9ecef', borderRadius: 6, background: '#f8f9fa'}}>
+                <div>
+                  <label className="form-label" style={{fontSize: 12}}>Max Name Variations</label>
+                  <input type="number" min={1} max={100} className="form-control"
+                    value={breadthOptions.maxNameVariations}
+                    onChange={(e) => { setBreadthOptions(o => ({...o, maxNameVariations: Math.max(1, Math.min(100, Number(e.target.value)||0))})); setTimeout(updateSearchTextFromControls, 0); }} />
+                </div>
+                <div>
+                  <label className="form-label" style={{fontSize: 12}}>Max Location Variations</label>
+                  <input type="number" min={1} max={10} className="form-control"
+                    value={breadthOptions.maxLocationVariations}
+                    onChange={(e) => { setBreadthOptions(o => ({...o, maxLocationVariations: Math.max(1, Math.min(10, Number(e.target.value)||0))})); setTimeout(updateSearchTextFromControls, 0); }} />
+                </div>
+                <div>
+                  <label className="form-label" style={{fontSize: 12}}>Max Requests Cap</label>
+                  <input type="number" min={1} max={200} className="form-control"
+                    value={breadthOptions.maxRequests}
+                    onChange={(e) => { setBreadthOptions(o => ({...o, maxRequests: Math.max(1, Math.min(200, Number(e.target.value)||0))})); setTimeout(updateSearchTextFromControls, 0); }} />
+                </div>
+                <div>
+                  <label className="form-label" style={{fontSize: 12}}>Delay Between Requests (ms)</label>
+                  <input type="number" min={0} max={5000} className="form-control"
+                    value={breadthOptions.delayMs}
+                    onChange={(e) => { setBreadthOptions(o => ({...o, delayMs: Math.max(0, Math.min(5000, Number(e.target.value)||0))})); setTimeout(updateSearchTextFromControls, 0); }} />
+                </div>
+                <div style={{gridColumn: '1 / -1'}}>
+                  <label className="form-label" style={{fontSize: 12}}>Time Ranges (comma or newline separated, e.g., 1890-1900, 1900-1910)</label>
+                  <textarea className="form-control" rows={2}
+                    value={timeRangesText}
+                    onChange={(e) => { setTimeRangesText(e.target.value); setTimeout(updateSearchTextFromControls, 0); }} />
+                </div>
+              </div>
+              <textarea 
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                style={{width: '100%', height: '50vh', fontFamily: 'monospace', fontSize: 13, padding: 10, borderRadius: 6, border: '1px solid #ced4da'}}
+              />
+              {searchTextError && (
+                <div className="alert alert-warning" style={{marginTop: 10}}>
+                  <i className="bi bi-exclamation-triangle me-1"></i>
+                  {searchTextError}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer" style={{padding: '10px 16px', borderTop: '1px solid #e9ecef', display: 'flex', gap: 8, justifyContent: 'flex-end'}}>
+              <button 
+                className="btn btn-outline-secondary" 
+                onClick={() => { 
+                  setSearchText(searchBaseline || ''); 
+                  setSearchTextError(''); 
+                  try {
+                    const obj = searchBaseline ? JSON.parse(searchBaseline) : null;
+                    if (obj) {
+                      setParsedSearchObj(obj);
+                      const opts = obj?.options || {};
+                      setBreadthOptions({
+                        maxNameVariations: Number.isFinite(opts.maxNameVariations) ? opts.maxNameVariations : 12,
+                        maxLocationVariations: Number.isFinite(opts.maxLocationVariations) ? opts.maxLocationVariations : 3,
+                        maxRequests: Number.isFinite(opts.maxRequests) ? opts.maxRequests : 30,
+                        delayMs: Number.isFinite(opts.delayMs) ? opts.delayMs : 300,
+                      });
+                      const srcs = opts.sources || {};
+                      setSourceOptions({
+                        familySearch: srcs.familySearch !== false,
+                        findAGrave: !!srcs.findAGrave,
+                        newspapers: !!srcs.newspapers,
+                        enableMocks: opts.enableMocks === true,
+                      });
+                      const tr = Array.isArray(obj?.timeRangeQueries) ? obj.timeRangeQueries : [];
+                      setTimeRangesText(tr.join(', '));
+                    }
+                  } catch {}
+                }}
+                disabled={!searchBaseline || searchText === searchBaseline}
+                style={{ marginRight: 'auto' }}
+              >
+                Reset to Generated
+              </button>
+              <button className="btn btn-secondary" onClick={() => setShowSearchModal(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={confirmAndSearch} disabled={isSearching}>
+                {isSearching ? 'Searching...' : 'Search'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

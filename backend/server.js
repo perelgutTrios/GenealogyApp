@@ -1,3 +1,11 @@
+// Shim deprecated util._extend to Object.assign to silence dependency warnings
+try {
+  const util = require('util');
+  if (util && typeof util._extend === 'function') {
+    util._extend = Object.assign;
+  }
+} catch {}
+
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -11,6 +19,32 @@ const gedcomRoutes = require('./routes/gedcom');
 const aiResearchRoutes = require('./routes/aiResearch');
 
 const app = express();
+
+// Configure Express trust proxy setting
+// Default: trust local/unique-local networks (good for dev + CRA proxy)
+// Override via ENV TRUST_PROXY. Accepted values:
+//  - "true" | "false" (booleans)
+//  - integer (number of proxy hops)
+//  - string (e.g., "loopback" or CIDR/IP)
+//  - comma-separated list of strings (e.g., "loopback,linklocal,uniquelocal")
+function resolveTrustProxy(envVal) {
+  if (envVal === undefined || envVal === null || envVal === '') {
+    return ['loopback', 'linklocal', 'uniquelocal'];
+  }
+  const raw = String(envVal).trim();
+  const lower = raw.toLowerCase();
+  if (lower === 'true') return true;
+  if (lower === 'false') return false;
+  if (/^\d+$/.test(lower)) return parseInt(lower, 10);
+  if (raw.includes(',')) {
+    return raw.split(',').map(s => s.trim()).filter(Boolean);
+  }
+  return raw; // single token (e.g., 'loopback' or '127.0.0.1')
+}
+
+const trustProxySetting = resolveTrustProxy(process.env.TRUST_PROXY);
+app.set('trust proxy', trustProxySetting);
+console.log(`Express trust proxy set to:`, trustProxySetting);
 
 // Security middleware
 app.use(helmet());
